@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -50,11 +51,15 @@ export function Header() {
       }}
     >
       <Container className="flex h-[4.5rem] items-center justify-between gap-6">
-        <Link
-          href="/"
-          className="rounded-md text-2xl font-semibold tracking-[0.04em]"
-        >
-          ADINN<span className="sr-only"> — Home</span>
+        <Link href="/" className="shrink-0 rounded-md" aria-label="ADINN Advertising Services Ltd., home">
+          <Image
+            src="/Adinn.png"
+            alt=""
+            width={516}
+            height={201}
+            priority
+            className="h-14 w-auto"
+          />
         </Link>
 
         <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">

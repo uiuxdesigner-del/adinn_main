@@ -17,6 +17,11 @@ export const metadata: Metadata = {
   title: { default: "ADINN", template: "%s | ADINN" },
   description:
     "ADINN corporate website prototype: one company, multiple ways to connect brands with people.",
+  openGraph: {
+    siteName: "ADINN",
+    title: "ADINN",
+    images: [{ url: "/Adinn.png", width: 516, height: 201, alt: "ADINN Advertising Services Ltd." }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

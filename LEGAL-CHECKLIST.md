@@ -13,6 +13,8 @@ Sources disagree, and the MCA master record could not be retrieved, so no CIN, r
 | adinn.com social links | Facebook page "Adinn Advertising Services Ltd"; LinkedIn slug "adinn-advertising-service-pvt-ltd-" |
 | Third-party GST directory (knowyourgst.com), IndiaMART | "Adinn Advertising Services Limited", GSTIN 33AAGCA2094M1ZK (from 2017), described as a public limited company; Madurai address with pincode 625010 (one listing shows 625016) |
 
+The supplied logo reads "Advertising Services Ltd.", which supports the "Limited" form; still confirm against MCA.
+
 **Needed:** exact registered name, CIN, whether public or private, registered office address, and whether the company is listed. Pull the MCA master data (mca.gov.in) and the certificate of incorporation.
 
 ## 1. Legally required (once the facts above are confirmed)

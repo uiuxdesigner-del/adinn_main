@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui";
 import { ReviewNotesToggle } from "@/components/review-notes";
@@ -23,7 +24,15 @@ export function Footer() {
       <Container className="rounded-2xl bg-white !px-6 py-8 md:!px-10 md:py-10">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1.4fr_1fr]">
           <div>
-            <p className="text-2xl font-semibold tracking-[0.04em]">ADINN</p>
+            <Link href="/" aria-label="ADINN Advertising Services Ltd., home" className="inline-block rounded-md">
+              <Image
+                src="/Adinn.png"
+                alt=""
+                width={516}
+                height={201}
+                className="h-14 w-auto"
+              />
+            </Link>
             <p className="mt-3 max-w-sm text-ash">
               Advertising across outdoor, roadshows, events, retail branding,
               printing, wall painting and digital, from offices in Madurai,
