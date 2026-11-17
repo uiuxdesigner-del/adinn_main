@@ -1,0 +1,301 @@
+/* Scoped to the Clients showcase: every class is prefixed "cs-" and nothing targets global elements.
+   (Plain CSS rather than a CSS module: the project Turbopack rule for *.css bypasses module naming.) */
+
+.cs-section {
+  background: #ffffff;
+  padding: 0;
+}
+
+.cs-panel {
+  /* Scene unit: 1% of the panel width, times a scale that grows on small screens. */
+  --scale: 1;
+  --u: calc(1cqw * var(--scale));
+  --radius: 34;
+  --persp: 38;
+  --row-y: 10.5;
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 16 / 6;
+  margin-inline: auto;
+  border-radius: 0;
+  background: #ffffff;
+  color: #111111;
+  container-type: inline-size;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---------- background logos on a shallow cylindrical surface ---------- */
+
+.cs-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  perspective: calc(var(--persp) * var(--u));
+  perspective-origin: 50% 50%;
+  pointer-events: none;
+}
+
+@property --th {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+.cs-band {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  /* One slow revolution; the second band runs the other way. */
+  animation: cs-drift 90s linear infinite;
+}
+
+.cs-band[data-dir="-1"] {
+  animation-direction: reverse;
+}
+
+@keyframes cs-drift {
+  from {
+    --th: 0;
+  }
+  to {
+    --th: 360;
+  }
+}
+
+.cs-logo {
+  /* Angle round the cylinder in degrees, wrapped to -180..180. */
+  --tn: calc(mod(var(--a0) + var(--th) + 180, 360) - 180);
+  --theta: calc(var(--tn) * 1deg);
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--h) * var(--u));
+  transform: translate(-50%, -50%)
+    translate3d(
+      calc(sin(var(--theta)) * var(--radius) * var(--u)),
+      calc(var(--row) * var(--row-y) * var(--u)),
+      calc((1 - cos(var(--theta))) * var(--radius) * var(--u))
+    )
+    rotateY(calc(var(--tn) * -1deg));
+  /* Fade out before the surface turns away, so logos never pop in or out. */
+  opacity: clamp(0, calc((80 - abs(var(--tn))) / 10), 1);
+}
+
+.cs-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.78;
+  transition:
+    opacity 600ms ease,
+    transform 600ms cubic-bezier(0.3, 0.1, 0.2, 1);
+}
+
+.cs-logo[data-active="true"] img {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+/* Keeps the area directly behind the photograph and caption calm. */
+.cs-quiet {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 26% 52% at 50% 50%,
+    rgba(255, 255, 255, 0.97) 55%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+/* ---------- foreground ---------- */
+
+.cs-focus {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6cqw;
+}
+
+.cs-frame {
+  position: relative;
+  width: 24cqw;
+  height: 10.5cqw;
+  overflow: hidden;
+}
+
+.cs-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-user-drag: none;
+}
+
+.cs-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.cs-logoimg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+.cs-incoming {
+  animation: cs-in var(--fade, 700ms) cubic-bezier(0.76, 0, 0.24, 1) both;
+}
+
+.cs-layer[data-leaving] {
+  animation: cs-out var(--fade, 700ms) cubic-bezier(0.76, 0, 0.24, 1) both;
+}
+
+@keyframes cs-in {
+  from {
+    transform: translateY(calc(var(--dir, 1) * 105%));
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes cs-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(var(--dir, 1) * -105%));
+  }
+}
+
+.cs-caption {
+  width: 24cqw;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4cqw;
+  font-size: clamp(11px, 0.95cqw, 15px);
+  line-height: 1.35;
+  color: #555555;
+}
+
+.cs-captionRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1cqw;
+  min-height: 1.6em;
+}
+
+.cs-captionLogo {
+  height: clamp(18px, 2cqw, 30px);
+  width: auto;
+  max-width: 7cqw;
+  object-fit: contain;
+  flex: none;
+}
+
+.cs-client {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: #111111;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-index {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+
+.cs-title {
+  min-width: 0;
+}
+
+.cs-link {
+  flex: none;
+  color: #111111;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cs-srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- small screens: flatter surface, larger photograph ---------- */
+
+@media (max-width: 720px) {
+  .cs-panel {
+    --scale: 1.7;
+    --radius: 34;
+    --persp: 44;
+    --row-y: 22;
+    aspect-ratio: 4 / 4.6;
+  }
+
+  .cs-quiet {
+    background: radial-gradient(
+      ellipse 85% 30% at 50% 46%,
+      rgba(255, 255, 255, 0.97) 60%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+
+  .cs-focus {
+    justify-content: center;
+    padding-bottom: 16cqw;
+    gap: 2cqw;
+  }
+
+  .cs-frame {
+    width: 70cqw;
+    height: 34cqw;
+  }
+
+  .cs-caption {
+    width: 74cqw;
+    font-size: 13px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-band {
+    animation: none;
+  }
+
+  .cs-logo img {
+    transition: none;
+  }
+}

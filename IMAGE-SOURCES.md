@@ -7,8 +7,8 @@ Attribution is shown in the site footer ("Photo credits"). CC BY-SA images must 
 | Local file | Creator | Licence | Source page | Location per source |
 |---|---|---|---|---|
 | events-brand-display-chennai.jpg | Aravind Sivaraj | CC BY-SA 3.0 | [File page](https://commons.wikimedia.org/wiki/File:Lotus-Renault_F1_car_in_display_during_an_event.jpg) | Express Avenue mall, Chennai (2012) |
-| fixtures-store-display-bangalore.jpg | Gpkp | CC BY-SA 4.0 | [File page](https://commons.wikimedia.org/wiki/File:Shoppers_Stop,_Bannerghatta_Road,_Bangalore_(2025)_05.jpg) | Bannerghatta Road, Bangalore (2025) |
 | printing-offset-press-bhubaneswar.jpg | Subhashish Panigrahi | CC BY-SA 4.0 | [File page](https://commons.wikimedia.org/wiki/File:Offset_printers_in_Sambad_Press_in_Bhubaneswar,_Odisha,_India.jpg) | Sambad Press, Bhubaneswar, Odisha (2016) |
+| fixtures-store-display-bangalore.jpg | Gpkp | CC BY-SA 4.0 | [File page](https://commons.wikimedia.org/wiki/File:Shoppers_Stop,_Bannerghatta_Road,_Bangalore_(2025)_05.jpg) | Bannerghatta Road, Bangalore (2025) |
 | outdoor-anna-salai-chennai.jpg | L.vivian.richard | Public domain | [File page](https://commons.wikimedia.org/wiki/File:Anna_Salai_view.jpg) | Anna Salai, Chennai |
 | roadshows-commercial-street-lights-bangalore.jpg | Saad Faruque | CC BY-SA 2.0 | [File page](https://commons.wikimedia.org/wiki/File:Commercial_Street,_Bangalore_(7870991636).jpg) | Commercial Street, Bangalore (2012) |
 | signage-brigade-road-bangalore.jpg | Ashwin Kumar | CC BY-SA 2.0 | [File page](https://commons.wikimedia.org/wiki/File:Brigade_Road_on_26_May_2013.jpg) | Brigade Road, Bangalore (2013) |
@@ -37,3 +37,23 @@ Attribution is shown in the site footer ("Photo credits"). CC BY-SA images must 
 Visible image captions were removed. Photographs are general-purpose illustrations: none shows Adinn staff, premises or completed projects. Required CC attribution stays in the footer under "Photo credits". Work records keep the visible "Illustrative example" label because they describe concepts, not real projects.
 
 **Not done:** Freepik and similar sites need an account and per-asset licence terms (many require visible attribution) and cannot be downloaded automatically here; no image-generation tool is available in this environment. The existing Commons photographs were kept.
+
+## Visual story (homepage, `components/story/visual-story.tsx`)
+
+- **Source:** the eight service images published on adinn.com (`service1`-`service8`, 6000x5000 WebP, downloaded 2026-11-13). They are Adinn's own campaign scenes (LED vehicle, billboard, storefront sign, event stage, retail fixtures, printing and POP counter, painted wall, digital desk), each carrying the Adinn logo on a flat panel, which is what lets the transitions match. Resized to 2800px and 1200px WebP in `public/story/`.
+- The scenes look like computer-generated illustrations rather than photographs of completed projects. Confirm with Adinn that these may be reused and how they should be described; the page does not present them as specific client work.
+- Region coordinates for each cut are in `lib/story.ts`.
+- The earlier Wikimedia photographs are still used on the other pages and are not used in the story.
+- Known imperfections: logo renderings differ slightly between scenes (aspect and sharpness), so the brief dissolve at each cut shows a faint ghost; the Digital scene's monitor shows a generic analytics dashboard from the source image.
+
+## Story journey update
+
+- Roadshow -> Outdoor -> Signage is now a connected camera journey built from the same adinn.com images: the outdoor image is projected onto the LED screen corners of `roadshow-2800.webp`, and the billboard face of `outdoor-2800.webp` continues as the sign in `signage-2800.webp`. Corner coordinates are in `lib/story.ts` (`journey`).
+- The outdoor image shown on the LED is a crop of `outdoor-2800.webp` (modified only by placement).
+- Later chapters (Signage -> Fixtures -> Printing -> Events -> Wall -> Digital) still use short match dissolves: the images have no spatial relationship. They need matched assets (a shopfront entrance that opens onto the retail interior, a printed panel visible in the event backdrop, a wall that carries the same campaign as the laptop screen) to be connected the same way.
+
+## Client logos and campaign films (homepage, Our Work)
+
+- `public/clients/*.webp`: official logo files published on adinn.com (downloaded 2026-11-14), trimmed of empty margins only: Havells, Honda, Maruti Suzuki, Royal Enfield, Daikin, Milky Mist, KFC, Burger King, Indian Overseas Bank, plus SPR India, Dalmia Cement and Hatsun (shown on case cards). They are third-party trademarks. Written client permission is still to be recorded; set `confirmed: false` in `lib/clients.ts` to withdraw one.
+- Campaign films (`spr`, `dalmia`, `hatsun`, `havells`) are hosted by Adinn at adinn.com/projects/*.mp4 and load only when a visitor presses play. They are not copied into this repo.
+- The homepage opening uses `public/story/roadshow-1200.webp`, an image published on adinn.com. It looks computer-generated, not like a photograph of a delivered campaign; replace with real campaign photography.

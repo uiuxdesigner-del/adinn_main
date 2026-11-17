@@ -5,6 +5,7 @@ import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { SmoothScroll } from "@/components/motion/smooth-scroll";
 import { ReviewNotesProvider } from "@/components/review-notes";
+import { siteUrl } from "@/lib/seo";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -14,9 +15,11 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+  alternates: { canonical: "./" },
   title: { default: "ADINN", template: "%s | ADINN" },
   description:
-    "ADINN corporate website prototype: one company, multiple ways to connect brands with people.",
+    "ADINN brings strategy, creativity, media and on-ground execution together to help businesses grow across South India.",
   openGraph: {
     siteName: "ADINN",
     title: "ADINN",

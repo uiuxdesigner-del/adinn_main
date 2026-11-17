@@ -58,12 +58,15 @@ export const projectUrls: Record<string, string | null> = {
  */
 export const contact: {
   phone: string | null;
+  /** Digits only with country code, for wa.me links. Confirm this number is on WhatsApp. */
+  whatsapp: string | null;
   email: string | null;
   /** Link to directions for the main office (e.g. a map URL). */
   directionsUrl: string | null;
   offices: { name: string; address: string }[];
 } = {
   phone: "+91 80158 06062",
+  whatsapp: "918015806062",
   email: "info@adinn.co.in",
   directionsUrl: null,
   offices: [

@@ -36,7 +36,7 @@ export default function VerticalsPage() {
       <CtaBanner
         title="Not sure which team to contact?"
         text="Describe your brief and we’ll help you find the right vertical."
-        primary={{ href: ENQUIRY_HREF, label: "Discuss Your Requirement" }}
+        primary={{ href: ENQUIRY_HREF, label: "Discuss Your Project" }}
       />
     </>
   );

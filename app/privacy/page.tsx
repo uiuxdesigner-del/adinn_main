@@ -23,19 +23,22 @@ export default function PrivacyPage() {
           from Adinn before the website is published.
         </p>
       </PageHeader>
-      <Section title="How this prototype handles information" compact>
+      <Section title="How this website handles enquiries (draft)" compact>
         <ul className="prose-width list-disc space-y-2 pl-5">
           <li>
-            The enquiry form on the Contact page is a preview. It does not send
-            your details anywhere, and Adinn does not receive them.
+            When you send the enquiry form, your name, company (if given), email, phone,
+            requirement and the topic you chose are sent to Adinn’s enquiry system.
           </li>
           <li>
-            What you type stays in the open page. It is not saved in your
-            browser’s storage or added to the address.
+            We also record the page you sent it from, the page that referred you and any campaign
+            (UTM) parameters in the address, so Adinn knows which activity led to the enquiry.
           </li>
           <li>
-            This prototype does not use accounts, payments, analytics or
-            advertising cookies.
+            The form is checked for spam. The details you type are not stored in your browser.
+          </li>
+          <li>
+            This site does not set advertising cookies. If analytics or a tag manager is added, this
+            notice must be updated first.
           </li>
         </ul>
       </Section>

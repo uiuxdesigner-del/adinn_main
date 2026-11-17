@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ContactOptions } from "@/components/contact-options";
 import { EnquiryForm } from "@/components/enquiry-form";
 import { HeroIntro } from "@/components/motion/reveal";
 import { ReviewNote } from "@/components/review-notes";
@@ -7,7 +8,11 @@ import { Container, PendingPanel } from "@/components/ui";
 import { contact } from "@/config/site";
 import { safeHttpUrl, safeMailto, safeTel } from "@/lib/links";
 
-export const metadata: Metadata = { title: "Contact Us" };
+export const metadata: Metadata = {
+  title: "Contact Adinn",
+  description:
+    "Tell Adinn about your business goal or requirement. Send an enquiry, call, WhatsApp or email the team.",
+};
 
 export default function ContactPage() {
   const email = safeMailto(contact.email);
@@ -65,7 +70,7 @@ export default function ContactPage() {
           className="rounded-2xl border border-line p-6 md:p-8 lg:col-start-2 lg:row-span-3 lg:row-start-1 lg:self-start"
         >
           <h2 id="enquiry-heading" className="text-h2">
-            I need guidance
+            Tell us about your project
           </h2>
           <div className="mt-5">
             <EnquiryForm />
@@ -79,6 +84,7 @@ export default function ContactPage() {
           <h2 id="details-heading" className="text-h2">
             Contact details
           </h2>
+          <ContactOptions className="mt-5" />
           <div className="mt-5">
             {anyDetail ? (
               <dl className="space-y-4">

@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { verticals } from "@/lib/verticals";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import {
+  interestOptions,
+  interestValues,
+  LIMITS,
+  validateEnquiry,
+  type EnquiryErrors,
+} from "@/lib/enquiry";
+import { track } from "@/lib/track";
 
 type Values = {
   name: string;
@@ -10,9 +17,10 @@ type Values = {
   email: string;
   phone: string;
   requirement: string;
-  vertical: string;
+  interest: string;
+  website: string; // honeypot
 };
-type Errors = Partial<Record<"name" | "email" | "phone" | "contact" | "requirement", string>>;
+type Status = "idle" | "sending" | "sent" | "failed";
 
 const empty: Values = {
   name: "",
@@ -20,29 +28,9 @@ const empty: Values = {
   email: "",
   phone: "",
   requirement: "",
-  vertical: "guidance",
+  interest: "", // "" = not chosen by the visitor yet
+  website: "",
 };
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// Accepts international formats: +, digits, spaces, dots, dashes, brackets; 7–15 digits.
-const PHONE_CHARS = /^\+?[\d\s().-]+$/;
-
-function validate(v: Values): Errors {
-  const e: Errors = {};
-  if (!v.name.trim()) e.name = "Enter your name.";
-  if (!v.requirement.trim()) e.requirement = "Describe your requirement.";
-  const email = v.email.trim();
-  const phone = v.phone.trim();
-  if (!email && !phone) e.contact = "Enter an email address or a phone number.";
-  if (email && !EMAIL.test(email))
-    e.email = "Enter an email address in the format name@example.com.";
-  if (phone) {
-    const digits = phone.replace(/\D/g, "").length;
-    if (!PHONE_CHARS.test(phone) || digits < 7 || digits > 15)
-      e.phone = "Enter a phone number with 7 to 15 digits. You can include + and spaces.";
-  }
-  return e;
-}
 
 const fieldIds = {
   name: "enquiry-name",
@@ -52,105 +40,173 @@ const fieldIds = {
   requirement: "enquiry-requirement",
 } as const;
 
-export function EnquiryForm() {
+const newKey = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+/**
+ * Enquiry form. Submits to /api/enquiry; the confirmation appears only after the server reports that
+ * the enquiry was accepted. Entered values are kept after any error. Browser-only data (landing
+ * page, UTM parameters, preselected interest) is read after mount, so server and first client
+ * render match.
+ */
+export function EnquiryForm({ source = "contact" }: { source?: string }) {
   const [values, setValues] = useState<Values>(empty);
-  const [errors, setErrors] = useState<Errors>({});
-  const [submitted, setSubmitted] = useState<Values | null>(null);
+  const [errors, setErrors] = useState<EnquiryErrors>({});
+  const [status, setStatus] = useState<Status>("idle");
+  const [failure, setFailure] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const summaryRef = useRef<HTMLDivElement>(null);
-  const confirmRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
+  const startedAt = useRef(0);
+  const key = useRef("");
+  const sending = useRef(false);
+  // The address query is browser-only: "" on the server and during hydration, the real value after.
+  const search = useSyncExternalStore(
+    () => () => {},
+    () => window.location.search,
+    () => "",
+  );
+  const wanted = new URLSearchParams(search).get("interest");
+  const preselected = wanted && interestValues.has(wanted) ? wanted : null;
+  const interest = values.interest || preselected || "guidance";
+
+  useEffect(() => {
+    startedAt.current = Date.now();
+    key.current = newKey();
+  }, []);
 
   useEffect(() => {
     if (attempt > 0) summaryRef.current?.focus();
   }, [attempt]);
   useEffect(() => {
-    if (submitted) confirmRef.current?.focus();
-  }, [submitted]);
+    if (status === "sent" || status === "failed") resultRef.current?.focus();
+  }, [status]);
 
-  const set = (key: keyof Values) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
-  ) => setValues((prev) => ({ ...prev, [key]: e.target.value }));
+  const set =
+    (k: keyof Values) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setValues((prev) => ({ ...prev, [k]: e.target.value }));
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    const found = validate(values);
+    if (sending.current) return; // duplicate-submission guard (double click, Enter twice)
+    const found = validateEnquiry(values);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setAttempt((n) => n + 1);
       return;
     }
-    setSubmitted({ ...values });
+    sending.current = true;
+    setStatus("sending");
+    setFailure(null);
+    try {
+      const res = await fetch("/api/enquiry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...values,
+          interest,
+          elapsed: Date.now() - startedAt.current,
+          key: key.current,
+          source: {
+            page: `${window.location.pathname}${window.location.search}`,
+            referrer: document.referrer,
+            utm: Object.fromEntries(
+              ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"].flatMap((k) => {
+                const v = new URLSearchParams(window.location.search).get(k);
+                return v ? [[k, v]] : [];
+              }),
+            ),
+          },
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        fields?: EnquiryErrors;
+      };
+      if (res.ok && body.ok) {
+        track("enquiry_submitted", { form: source, interest });
+        setStatus("sent");
+        return;
+      }
+      if (body.fields) {
+        setErrors(body.fields);
+        setAttempt((n) => n + 1);
+        setStatus("idle");
+        return;
+      }
+      setFailure(
+        body.error === "rate_limited"
+          ? "Too many enquiries were sent from this connection. Please wait a few minutes or contact us directly."
+          : body.error === "not_configured"
+            ? "Online enquiries are not available right now, so your enquiry has not been sent. Please call, WhatsApp or email us instead."
+            : "We could not send your enquiry, so it has not been received. Your details are still here: please try again or contact us directly.",
+      );
+      track("enquiry_failed", { form: source, reason: body.error ?? "network" });
+      setStatus("failed");
+    } catch {
+      setFailure(
+        "We could not reach the server, so your enquiry has not been sent. Your details are still here: please try again or contact us directly.",
+      );
+      track("enquiry_failed", { form: source, reason: "network" });
+      setStatus("failed");
+    } finally {
+      sending.current = false;
+    }
   }
 
-  const verticalName =
-    verticals.find((v) => v.id === submitted?.vertical)?.name ?? "I need guidance";
-  const errorList = (Object.keys(errors) as (keyof Errors)[]).map((k) => ({
+  const errorList = (Object.keys(errors) as (keyof EnquiryErrors)[]).map((k) => ({
     key: k,
     message: errors[k]!,
   }));
+  const describe = (...ids: (string | false | undefined)[]) =>
+    ids.filter(Boolean).join(" ") || undefined;
 
-  if (submitted) {
-    const rows: [string, string][] = [
-      ["Name", submitted.name],
-      ["Company", submitted.company || "Not provided"],
-      ["Email", submitted.email || "Not provided"],
-      ["Phone", submitted.phone || "Not provided"],
-      ["Vertical", verticalName],
-      ["Requirement", submitted.requirement],
-    ];
+  if (status === "sent") {
     return (
       <div
-        ref={confirmRef}
+        ref={resultRef}
         tabIndex={-1}
         role="status"
         className="rounded-xl border border-ink p-6 outline-none"
       >
-        <h3 className="text-h3">Preview complete: nothing was sent</h3>
-        <p className="mt-2">
-          This submission was simulated. No information was sent or stored, and
-          Adinn has not received this enquiry.
+        <h3 className="text-h3">Thank you. We have received your enquiry.</h3>
+        <p className="mt-2 text-ash">
+          A member of the Adinn team will read it and get back to you using the details you gave.
         </p>
-        <dl className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-[8rem_1fr]">
-          {rows.map(([k, v]) => (
-            <div key={k} className="contents">
-              <dt className="font-medium">{k}</dt>
-              <dd className="whitespace-pre-wrap break-words text-ash">{v}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setSubmitted(null)}
-          >
-            Edit enquiry
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              setValues(empty);
-              setErrors({});
-              setSubmitted(null);
-            }}
-          >
-            Start a new preview
-          </button>
-        </div>
+        <button
+          type="button"
+          className="btn btn-secondary mt-5"
+          onClick={() => {
+            setValues(empty);
+            setErrors({});
+            setStatus("idle");
+            key.current = newKey();
+            startedAt.current = Date.now();
+          }}
+        >
+          Send another enquiry
+        </button>
       </div>
     );
   }
 
-  const describe = (...ids: (string | false | undefined)[]) =>
-    ids.filter(Boolean).join(" ") || undefined;
-
   return (
-    <form onSubmit={onSubmit} noValidate>
-      <p className="mb-6 rounded-lg bg-line px-4 py-3 text-note text-ash">
-        Prototype only: this form does not send information. Fields marked
-        required must be completed to preview an enquiry.
-      </p>
+    <form onSubmit={onSubmit} noValidate aria-busy={status === "sending"}>
+      {status === "failed" && failure && (
+        <div
+          ref={resultRef}
+          tabIndex={-1}
+          role="alert"
+          className="mb-6 rounded-lg border-2 border-ink p-4 outline-none"
+        >
+          <h3 className="text-h3">Your enquiry has not been sent</h3>
+          <p className="mt-1">{failure}</p>
+        </div>
+      )}
 
       {errorList.length > 0 && (
         <div
@@ -161,14 +217,14 @@ export function EnquiryForm() {
         >
           <h3 className="text-h3">Please fix the following</h3>
           <ul className="mt-2 list-disc pl-5">
-            {errorList.map(({ key, message }) => (
-              <li key={key}>
+            {errorList.map(({ key: k, message }) => (
+              <li key={k}>
                 <a
-                  href={`#${fieldIds[key]}`}
+                  href={`#${fieldIds[k]}`}
                   className="link"
                   onClick={(ev) => {
                     ev.preventDefault();
-                    document.getElementById(fieldIds[key])?.focus();
+                    document.getElementById(fieldIds[k])?.focus();
                   }}
                 >
                   {message}
@@ -189,6 +245,7 @@ export function EnquiryForm() {
             name="name"
             type="text"
             autoComplete="name"
+            maxLength={LIMITS.name}
             required
             aria-required="true"
             aria-invalid={errors.name ? true : undefined}
@@ -212,6 +269,7 @@ export function EnquiryForm() {
             name="company"
             type="text"
             autoComplete="organization"
+            maxLength={LIMITS.company}
             value={values.company}
             onChange={set("company")}
             className="field mt-1"
@@ -220,7 +278,7 @@ export function EnquiryForm() {
 
         <fieldset className="md:col-span-2">
           <legend className="font-medium">
-            How can we reach you? Provide an email, a phone number, or both.
+            How can we reach you? Provide an email, a phone number, or both (at least one is required).
           </legend>
           {errors.contact && (
             <p id="enquiry-contact-error" className="mt-1 font-medium">
@@ -237,6 +295,7 @@ export function EnquiryForm() {
                 name="email"
                 type="email"
                 autoComplete="email"
+                maxLength={LIMITS.email}
                 aria-invalid={errors.email || errors.contact ? true : undefined}
                 aria-describedby={describe(
                   errors.contact && "enquiry-contact-error",
@@ -261,6 +320,7 @@ export function EnquiryForm() {
                 name="phone"
                 type="tel"
                 autoComplete="tel"
+                maxLength={LIMITS.phone}
                 aria-invalid={errors.phone || errors.contact ? true : undefined}
                 aria-describedby={describe(
                   errors.contact && "enquiry-contact-error",
@@ -280,20 +340,19 @@ export function EnquiryForm() {
         </fieldset>
 
         <div className="md:col-span-2">
-          <label htmlFor="enquiry-vertical" className="block font-medium">
-            Vertical (optional)
+          <label htmlFor="enquiry-interest" className="block font-medium">
+            What is this about? (optional)
           </label>
           <select
-            id="enquiry-vertical"
-            name="vertical"
-            value={values.vertical}
-            onChange={set("vertical")}
+            id="enquiry-interest"
+            name="interest"
+            value={interest}
+            onChange={set("interest")}
             className="field mt-1"
           >
-            <option value="guidance">I need guidance</option>
-            {verticals.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
+            {interestOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
               </option>
             ))}
           </select>
@@ -307,12 +366,11 @@ export function EnquiryForm() {
             id="enquiry-requirement"
             name="requirement"
             rows={5}
+            maxLength={LIMITS.requirement}
             required
             aria-required="true"
             aria-invalid={errors.requirement ? true : undefined}
-            aria-describedby={describe(
-              errors.requirement && "enquiry-requirement-error",
-            )}
+            aria-describedby={describe(errors.requirement && "enquiry-requirement-error")}
             value={values.requirement}
             onChange={set("requirement")}
             className="field mt-1"
@@ -323,17 +381,31 @@ export function EnquiryForm() {
             </p>
           )}
         </div>
+
+        {/* Honeypot: hidden from people and assistive technology, tempting to bots. */}
+        <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
+          <label htmlFor="enquiry-website">Leave this field empty</label>
+          <input
+            id="enquiry-website"
+            name="website"
+            type="text"
+            tabIndex={-1}
+            autoComplete="off"
+            value={values.website}
+            onChange={set("website")}
+          />
+        </div>
       </div>
 
       <p className="text-note mt-5 text-ash">
-        Read the{" "}
+        We use these details only to reply to your enquiry. Read the{" "}
         <Link href="/privacy" className="link">
-          draft privacy notice
-        </Link>{" "}
-        for how this prototype handles information.
+          privacy notice
+        </Link>
+        .
       </p>
-      <button type="submit" className="btn btn-primary mt-5">
-        Preview Enquiry
+      <button type="submit" className="btn btn-primary mt-5" disabled={status === "sending"}>
+        {status === "sending" ? "Sending…" : "Send Enquiry"}
       </button>
     </form>
   );

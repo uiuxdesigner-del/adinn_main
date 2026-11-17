@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { Container } from "@/components/ui";
 import { ENQUIRY_HREF, mainNav, utilityNav } from "@/lib/navigation";
 
-const headerNav = [{ href: "/", label: "Home" }, ...mainNav];
+const headerNav = [...mainNav];
 
 export function Header() {
   const pathname = usePathname();
@@ -65,7 +65,7 @@ export function Header() {
         <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
           {headerNav.map((item) => navLink(item, "px-4 py-2.5"))}
           <Link href={ENQUIRY_HREF} className="btn btn-primary ml-4">
-            Discuss Your Requirement
+            Discuss Your Project
           </Link>
         </nav>
 
@@ -92,7 +92,7 @@ export function Header() {
           </nav>
           <div className="mt-4">
             <Link href={ENQUIRY_HREF} className="btn btn-primary w-full">
-              Discuss Your Requirement
+              Discuss Your Project
             </Link>
           </div>
           <nav

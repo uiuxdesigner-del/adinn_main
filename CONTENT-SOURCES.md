@@ -53,3 +53,11 @@ adinn.com has six pages (sitemap: home, about-us, service, projects, careers, co
 - Publicis Groupe: frames its offer as one connected network ("The power of one"); keeps Careers and History with Governance; separate responsibility and investor sections.
 - dentsu: names a network of agency brands plus case studies; "Who we are" groups background and leadership; Contact Us leads to a form and office locations.
 What this changed for Adinn: a single company proposition, connected capabilities shown through client situations, contact routes in one place with offices, legal pages grouped in the footer, and responsibility/people content published only when documented.
+
+## Business-solutions redesign (Nov 2026)
+
+- Positioning, solutions (brand launches, market expansion, lead generation, retail footfall, brand awareness) and service links are drafted from the adinn.com service descriptions already recorded above. Outcomes are written as "designed to", never as results.
+- **Service taxonomy:** the approved eight are Outdoor / OOH, Roadshows, Events & Activations, Signage & Retail Branding, Retail Fixtures, Printing & POP, Wall Advertising, Digital Marketing. The brief's "Media Planning and Buying" and "Exhibition Solutions" (and "DOOH", "B2B Branding") are not in it, so they are not published. Add them to `lib/verticals.ts` only when Adinn confirms them.
+- "25+ years": adinn.com states "more than 24 years", so the site says that.
+- Case studies: only the four films exist; no challenge, objective, coverage or results are published, so none are written.
+- WhatsApp uses the contact-page phone number; confirm it is a WhatsApp Business number.
