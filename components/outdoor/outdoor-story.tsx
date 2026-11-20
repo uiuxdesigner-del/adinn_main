@@ -237,8 +237,13 @@ export function OutdoorStory() {
           const drive = 0.5 - 0.5 * Math.cos(Math.PI * seg(pr, 0.01, IE * 0.8));
           // Arrival walk: deterministic in scroll progress, and latched so scrolling back holds the settled
           // audience (people never walk backwards); it resets only once the opening is out of view.
-          if (pr < 0.03) arrivalLatch = 0;
-          arrivalLatch = Math.max(arrivalLatch, seg(pr, 0.1, IE - 0.01));
+          // The audience arrives only AFTER the vehicle is parked (drive ends at pr = IE * 0.8). `aud` is a pure
+          // function of scroll progress, so on reverse scroll or refresh it can never be ahead of the vehicle: the
+          // audience leaves first, then the vehicle drives out.
+          const parkedAt = IE * 0.8;
+          const aud = smooth(seg(pr, parkedAt, IE - 0.005));
+          if (pr < parkedAt) arrivalLatch = 0;
+          arrivalLatch = Math.max(arrivalLatch, seg(pr, parkedAt, IE - 0.01));
           arrival?.update(arrivalLatch);
           const inTruck = p < T.approachEnd;
           truckWorld.style.visibility = inTruck ? "visible" : "hidden";
@@ -276,8 +281,16 @@ export function OutdoorStory() {
             const cw = OOH.crowds;
             const cin = (dx: number, dy: number, sc: number) =>
               ` translate(${dx}px, ${dy}px) translate(${cw.ax}px, ${cw.ay}px) scale(${sc}) translate(${-cw.ax}px, ${-cw.ay}px)`;
-            place(crowds.left, SC.depth.crowd, cin(cw.left.dx, cw.left.dy, cw.left.scale));
-            place(crowds.right, SC.depth.crowd, cin(cw.right.dx, cw.right.dy, cw.right.scale));
+            // the crowds gather in from outside (M.gatherIn) as the audience arrives, hidden until the vehicle is parked
+            const gather = M.gatherIn * (1 - aud);
+            place(crowds.left, SC.depth.crowd, cin(cw.left.dx - gather, cw.left.dy, cw.left.scale));
+            place(crowds.right, SC.depth.crowd, cin(cw.right.dx + gather, cw.right.dy, cw.right.scale));
+            for (const el of [crowds.left, crowds.right]) {
+              el.style.opacity = String(aud);
+              // "inherit", never "visible": once the roadshow scene ends its parent is hidden and an explicit "visible" would keep
+              // the audience standing in front of the billboard during the aerial zoom
+              el.style.visibility = aud < 0.01 ? "hidden" : "inherit";
+            }
             if (walkerHost) place(walkerHost, SC.depth.crowd, cin(cw.right.dx, cw.right.dy, cw.right.scale));
           }
 
@@ -353,6 +366,11 @@ export function OutdoorStory() {
             end: () => `+=${Math.round((stage.clientHeight * M.scrollVh) / (1 - FILL))}`,
             scrub: M.scrub,
             invalidateOnRefresh: true,
+            // Refresh / restore: put the animation at the trigger's real progress at once (the scrub tween only
+            // follows scroll CHANGES, so a page that already sits mid-story would otherwise render the opening).
+            onRefresh: (self) => {
+              self.animation?.progress(self.progress);
+            },
           },
         });
 

@@ -4,4 +4,4 @@
  */
 export const siteUrl = (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
-export const sitePaths = ["/", "/about", "/work", "/verticals", "/contact", "/careers", "/investors", "/privacy"];
+export const sitePaths = ["/", "/about", "/work", "/verticals", "/verticals/outdoor", "/verticals/roadshows", "/verticals/events", "/verticals/signage", "/verticals/fixtures", "/verticals/printing", "/verticals/wall", "/verticals/digital", "/contact", "/careers", "/investors", "/privacy"];

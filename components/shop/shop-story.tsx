@@ -5,15 +5,18 @@ import { useRef } from "react";
 import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import { enquiryHref } from "@/lib/navigation";
 import { matrix3d, solveHomography, type P2 } from "../outdoor/geometry";
-import { ART_ASPECT, canvasOf, drawArtwork, drawDigital } from "./shop-art";
+import { ART_ASPECT, CARD_DESIGN, CARD_RADIUS_FRAC, DESIGN_H, DESIGN_W, canvasOf, drawArtwork, drawDigital, artParts, type ArtPart } from "./shop-art";
 import { StorefrontScene } from "./storefront-scene";
 import {
+  BOARD_PANEL,
   BOOK,
   FILES,
   FRONT,
   IMG,
   interiorPlace,
   LAPTOP_SCREEN,
+  PRINT_FOCUS,
+  PRINT_IMG,
   SHOP,
   SHOP_COPY,
   WALL,
@@ -24,11 +27,21 @@ const seg = (t: number, a: number, b: number) => clamp((t - a) / (b - a));
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const LIVE = "(prefers-reduced-motion: no-preference) and (min-height: 420px)";
 
-const AW = 1600;
-const AH = 1000;
-const SW = 1536;
-const SH = 960;
-const BZ = 48; // laptop bezel (px of the plate canvas)
+// Canvas sizes are ~1.56x the 1536x960 design space of shop-art's drawDigital (S = h / 960), so the screen and the card stay
+// sharp when the camera fills the display with them. Everything below is expressed relative to these.
+const AW = 2400;
+const AH = 1500;
+const SW = 2400;
+const SH = Math.round((SW * DESIGN_H) / DESIGN_W); // the screen canvas has the TV's own proportions (shop-art design space)
+const CS = SW / 1536;
+const BZ = 48 * CS; // laptop bezel (px of the plate canvas)
+const CARD = { x: CARD_DESIGN.x * CS, y: CARD_DESIGN.y * CS, w: CARD_DESIGN.w * CS }; // the creative card's place on the TV screen (shop-art drawDigital, screen px)
+/**
+ * EASY ADJUST for the shop view after the zoom-out (in photo pixels, 0 = default).
+ *   y: + moves the image UP (shows more street at the bottom), - moves it DOWN (shows more of the sign board). Keep y >= 0.
+ *   x: + moves the image LEFT, - moves it RIGHT. Keep x near 0 or side margins appear.
+ */
+const FIX_VIEW = { x: 0, y: 0 };
 const unit: P2[] = [
   { x: 0, y: 0 },
   { x: 1, y: 0 },
@@ -46,6 +59,15 @@ function planeRect(corners: [number, number][], r: { u0: number; u1: number; v0:
 }
 const bookArt = planeRect(BOOK.page, BOOK.art);
 const wallArt = planeRect(WALL.quad, WALL.art);
+// Wall plane size in image px (mean of opposite edges): the wide painted artwork and the card it grows out of are laid on it.
+const wd = (a: number, b: number) => Math.hypot(WALL.quad[a][0] - WALL.quad[b][0], WALL.quad[a][1] - WALL.quad[b][1]);
+const WALL_W = (wd(0, 1) + wd(3, 2)) / 2;
+const WALL_H = (wd(0, 3) + wd(1, 2)) / 2;
+const WALL_CH = 750;
+const WALL_CW = Math.round((WALL_CH * ((WALL.art.u1 - WALL.art.u0) * WALL_W)) / ((WALL.art.v1 - WALL.art.v0) * WALL_H));
+// the Digital/POP card (16:10) sits at the left end of the painted artwork, same height, so its text and logo coincide with the painted ones
+const wallCardU1 = WALL.art.u0 + (((WALL.art.v1 - WALL.art.v0) * WALL_H * ART_ASPECT) / WALL_W);
+const wallCard = planeRect(WALL.quad, { u0: WALL.art.u0, u1: wallCardU1, v0: WALL.art.v0, v1: WALL.art.v1 });
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** Monotone cubic through keys: no overshoot, continuous velocity, flat where keys repeat. */
@@ -126,15 +148,18 @@ export function ShopStory() {
         const kArt = FRONT.fascia.h / 970;
         const screen = q<HTMLCanvasElement>("[data-screen]");
         const screenClip = q("[data-screenclip]");
+        const cardEl = q<HTMLCanvasElement>("[data-card]");
         const print = q("[data-print]");
         const printPhoto = q("[data-print-photo]");
         const printArtA = q<HTMLCanvasElement>("[data-print-a]");
+        const printClip = q("[data-print-clip]");
         const printArtM = q<HTMLCanvasElement>("[data-print-m]");
         const printShade = q("[data-print-shade]");
         const wall = q("[data-wall]");
         const wallPhoto = q("[data-wall-photo]");
         const wallArtA = q<HTMLCanvasElement>("[data-wall-a]");
-        const wallArtM = q<HTMLCanvasElement>("[data-wall-m]");
+        const wallEls = Array.from(rootEl.querySelectorAll<HTMLCanvasElement>("[data-wall-e]"));
+        let wallParts: ArtPart[] = [];
         const wallShade = q("[data-wall-shade]");
         const copies = Array.from(rootEl.querySelectorAll<HTMLElement>("[data-copy]"));
         const headerH = () => document.querySelector("header")?.offsetHeight ?? 72;
@@ -148,17 +173,12 @@ export function ShopStory() {
         const ap = FRONT.aperture;
         const fa = FRONT.fascia;
 
-        // ---- laptop screen in storefront coordinates (the interior is placed there) ---------------
-        // The fixtures interior is FIXED: one scale for the whole chapter, the smallest that still covers the
-        // doorway (no gaps, nothing zooming or shaking on its own). Everything mapped onto it (the TV) uses it.
+        // ---- TV screen in storefront coordinates ---------------------------------------------------
+        // The interior photograph is rendered at interiorPlace (StorefrontScene) with NO extra scale, so the
+        // TV corners map through exactly that placement: world = place + imagePx * (place.w / IMG.w).
         const ik = interiorPlace.w / IMG.w;
         const apC = { x: FRONT.aperture.x + FRONT.aperture.w / 2, y: FRONT.aperture.y + FRONT.aperture.h / 2 };
-        const interiorK = Math.max(FRONT.aperture.w / interiorPlace.w, FRONT.aperture.h / interiorPlace.h);
-        const lapWorld: P2[] = LAPTOP_SCREEN.map(([x, y]) => {
-          const wx = interiorPlace.x + x * ik;
-          const wy = interiorPlace.y + y * ik;
-          return { x: apC.x + (wx - apC.x) * interiorK, y: apC.y + (wy - apC.y) * interiorK };
-        });
+        const lapWorld: P2[] = LAPTOP_SCREEN.map(([x, y]) => ({ x: interiorPlace.x + x * ik, y: interiorPlace.y + y * ik }));
         const lapCx = lapWorld.reduce((a, b) => a + b.x, 0) / 4;
         const lapCy = lapWorld.reduce((a, b) => a + b.y, 0) / 4;
 
@@ -170,10 +190,12 @@ export function ShopStory() {
         screen.width = SW + BZ * 2;
         screen.height = SH + BZ * 2;
         let lastU = -1;
-        const drawScreen = (u: number) => {
-          if (Math.abs(u - lastU) < 0.002) return;
+        let lastOut = false;
+        const drawScreen = (u: number, cardOut = false) => {
+          if (Math.abs(u - lastU) < 0.002 && cardOut === lastOut) return;
           lastU = u;
-          drawDigital(uctx, SW, SH, u, font, art);
+          lastOut = cardOut;
+          drawDigital(uctx, SW, SH, u, font, art, cardOut);
           sctx.clearRect(0, 0, screen.width, screen.height);
           sctx.fillStyle = "#101112";
           sctx.beginPath();
@@ -183,13 +205,42 @@ export function ShopStory() {
         };
         const paintArt = () => {
           drawArtwork(actx, AW, AH, font, logoImg);
-          for (const c of [printArtA, printArtM, wallArtA, wallArtM]) {
+          for (const c of [printArtA, printArtM, cardEl]) {
             c.width = AW;
             c.height = AH;
-            c.getContext("2d")!.drawImage(art, 0, 0);
+            const cctx = c.getContext("2d")!;
+            // The card (and the printed panel it becomes) keeps the SAME corner radius, in proportion, all the way
+            // through the zoom; the wall artwork stays square.
+            {
+              cctx.save();
+              cctx.beginPath();
+              cctx.roundRect(0, 0, AW, AH, AW * CARD_RADIUS_FRAC);
+              cctx.clip();
+              cctx.drawImage(art, 0, 0);
+              cctx.restore();
+            }
           }
+          // the wall layer's paper: the card's cream sheet only (same rounded shape); its lettering, logo and graphic are separate pieces
+          wallArtA.width = AW;
+          wallArtA.height = AH;
+          {
+            const pc = wallArtA.getContext("2d")!;
+            pc.fillStyle = "#f6f1e9";
+            pc.beginPath();
+            pc.roundRect(0, 0, AW, AH, AW * CARD_RADIUS_FRAC);
+            pc.fill();
+          }
+          // the campaign pieces: each is drawn once at the card's size and afterwards only moved/scaled
+          wallParts = artParts(actx, font, logoImg, AW, AH, WALL_CW, WALL_CH);
+          wallEls.forEach((el, i) => {
+            const part = wallParts[i];
+            if (!part) return;
+            el.width = part.w;
+            el.height = part.h;
+            part.draw(el.getContext("2d")!);
+          });
           lastU = -1;
-          drawScreen(clamp(seg(state.p, R.digital[0], R.digital[1])));
+          drawScreen(clamp(seg(state.p, R.digital[0], R.digital[1])), seg(state.p, R.cardLift[0], R.cardLift[1]) > 0);
         };
         const logoImg = new Image();
         logoImg.src = FILES.logo;
@@ -218,44 +269,46 @@ export function ShopStory() {
             { x: (Vw - w) / 2, y: (Vh + h) / 2 },
           ];
         };
-        /**
-         * Release a plate: s = 0 shows the artwork rectified to fill the view, s = 1 shows the whole
-         * photograph (cover, centred on the artwork). Intermediate frames interpolate the four
-         * corners, so straight edges stay straight and the same artwork stays attached to the plane.
-         */
         const artRect: P2[] = [
           { x: 0, y: 0 },
           { x: AW, y: 0 },
           { x: AW, y: AH },
           { x: 0, y: AH },
         ];
-        const plateTo = (photos: HTMLElement[], arts: HTMLElement[], quad: P2[], s: number) => {
+        /**
+         * The print camera (photo uniform scale cs + shift tx,ty) and the card's fixed place on the counter (IMAGE coordinates).
+         * s = 0: the card has exactly the Digital card's size and the view never shows past the photo's edge (the pan is clamped);
+         * the Digital card's final rectangle is taken from this same s = 0 state, so the hand-off is exact. s = 1: reading view.
+         */
+        const printGeom = (s: number) => {
+          const dim = PRINT_IMG;
+          const c1 = Math.max(Vw / dim.w, Vh / dim.h);
+          const pcx = bookArt.reduce((a, b2) => a + b2.x, 0) / 4;
+          const pcy = bookArt.reduce((a, b2) => a + b2.y, 0) / 4;
+          const cardW = Math.max(bookArt[1].x - bookArt[0].x, bookArt[2].x - bookArt[3].x) + 2; // 2 image px wider than the panel: the window trims it
+          const cardH = cardW / (AW / AH);
+          const TEXT_MID = 0.41; // vertical centre of the headline/tagline block, as a fraction of the card height
+          const cx0 = pcx - cardW / 2;
+          const cy0 = pcy - TEXT_MID * cardH;
           const t0 = fillRect();
-          const c = Math.max(Vw / IMG.w, Vh / IMG.h);
-          const acx = quad.reduce((a, b) => a + b.x, 0) / 4;
-          const ox = Math.min(0, Math.max(Vw - IMG.w * c, Vw / 2 - acx * c));
-          const oy = (Vh - IMG.h * c) / 2;
-          const t1 = quad.map((p) => ({ x: p.x * c + ox, y: p.y * c + oy }));
-          const tgt = t0.map((a, i) => ({ x: lerp(a.x, t1[i].x, s), y: lerp(a.y, t1[i].y, s) }));
-          // photo and artwork get their own single transform (no nesting, so both stay sharp)
-          const mp = matrix3d(solveHomography(quad, tgt));
-          for (const el of photos) el.style.transform = mp;
-          const ma = matrix3d(solveHomography(artRect, tgt));
-          for (const el of arts) el.style.transform = ma;
+          const c0 = Math.max(c1, (t0[1].x - t0[0].x) / cardW);
+          const cs = Math.exp(lerp(Math.log(c0), Math.log(c1), s));
+          const g = c0 === c1 ? 1 : (1 / cs - 1 / c0) / (1 / c1 - 1 / c0); // pans linearly in view size: the zoom stays a straight glide
+          const fx = lerp(cx0 + cardW / 2, PRINT_FOCUS.x, g);
+          const fy = lerp(cy0 + cardH / 2, PRINT_FOCUS.y, g);
+          const tx = Math.min(0, Math.max(Vw - dim.w * cs, Vw / 2 - fx * cs));
+          const ty = Math.min(0, Math.max(Vh - dim.h * cs, Vh / 2 - fy * cs));
+          return { dim, cs, tx, ty, cx0, cy0, cardW, cardH };
         };
-        const blend = (a: HTMLElement, m: HTMLElement, shade: HTMLElement, s: number, shadeMax = 0.85) => {
-          const mm2 = smooth(seg(s, 0, 0.55));
-          a.style.opacity = String(1 - mm2);
-          m.style.opacity = String(0.96 * mm2);
-          shade.style.opacity = String(shadeMax * mm2);
-        };
-
         // ---- camera keys (storefront coordinates) ---------------------------------------------------
+        // Sign slide distances (storefront units). They are sized to what the zoomed camera can actually see, so the
+        // Adinn art leaves and the Havells board enters from the right edge of the VIEW (not from a fascia-width away,
+        // which left the visible fascia empty/white for part of the swap).
+        const slide = { out: fa.w / 2 + kArt * 1000 + 24, inn: fa.w + 24 };
         const zero = (x: number) => x * 0;
         const fns = { cx: zero, cy: zero, ls: zero };
         const buildKeys = () => {
           const portrait = Vw < Vh;
-          const fill = Math.max(Vw / ap.w, Vh / ap.h); // doorway covers the view
           const cx0 = fa.x + fa.w / 2;
           const cy0 = fa.y + fa.h / 2;
           // Opening frame: the Outdoor board's art fills the view exactly (so the zoom continues); never
@@ -263,27 +316,48 @@ export function ShopStory() {
           const cover = Math.max(Vw / IMG.w, Vh / IMG.h);
           const sFascia = Math.max(cover, portrait ? Math.min(Vw / (2000 * kArt), Vh / fa.h) : Math.max(Vw / (2000 * kArt), Vh / fa.h));
           const sWide = portrait ? Math.max(Vw / 760, (Vh / IMG.h) * 1.02) : Math.max(Vw / 1440, Math.max(Vw / IMG.w, Vh / IMG.h) * 1.02);
-          const tvW = Math.hypot(lapWorld[1].x - lapWorld[0].x, lapWorld[1].y - lapWorld[0].y);
           // the whole interior photograph (as placed in the doorway) fits the view
-          const sFull = Math.min(Vw / (interiorPlace.w * interiorK), Vh / (interiorPlace.h * interiorK));
-          const sLap = Math.max(2.75 * fill, (0.5 * Vw) / tvW); // the small TV fills about half the view
+          const visHalf = Vw / (2 * sFascia);
+          const boardW = fa.w * (1 - 2 * BOARD_PANEL.inset);
+          slide.out = Math.min(fa.w / 2 + kArt * 1000 + 24, visHalf + kArt * 1000 + 12);
+          slide.inn = Math.min(fa.w + 24, visHalf + boardW / 2 + 12);
+          const tvW = Math.hypot(lapWorld[1].x - lapWorld[0].x, lapWorld[1].y - lapWorld[0].y);
+          const tvH = Math.hypot(lapWorld[3].x - lapWorld[0].x, lapWorld[3].y - lapWorld[0].y);
+          const sFull = 0.9 * Math.min(Vw / interiorPlace.w, Vh / interiorPlace.h); // 0.9: a visible margin so the whole photograph reads as uncropped
+          // Portrait screens cannot fit the photo's width at a readable size (it would shrink into grey bands): hold at the
+          // same cover framing the doorway already has while the doors open. Landscape keeps the whole-photo fit.
+          const sHold = portrait ? sWide * 1.03 : sFull;
+          const sLap = (portrait ? Math.min : Math.max)(Vw / tvW, Vh / tvH); // all the way in: the TV screen COVERS the display, so no TV frame or bezel is left in view (portrait: fits the width so no content is cut)
+          // Landscape: a PROPER zoom-out: the whole storefront photo fits the view (sign board, shop and street all visible, centred).
+          // The strips left/right of the photo on wide screens are filled by the extended exterior photo (BG in shop-config.ts), so there are no
+          // empty margins. Portrait keeps its cover framing, moved so the top of the photo (the sign board) is in view.
+          const sSee = portrait ? sHold : Math.min(Vw / IMG.w, Vh / IMG.h);
+          const holdY = portrait ? Math.min(apC.y, Vh / (2 * sSee)) + FIX_VIEW.y : IMG.h / 2 + FIX_VIEW.y;
+          const holdX = portrait ? apC.x : IMG.w / 2;
           type K = [number, number, number, number]; // p, cx, cy, s
           // Evenly paced: each stretch changes the framing by a modest amount per scroll distance.
           const keys: K[] = [
             [0, cx0, cy0, sFascia],
             [0.15, cx0, cy0, sFascia], // hold on the zoomed-in board while the sign swap plays
-            [0.23, cx0, 0, sWide], // then zoom out (cy 0 clamps to the top of the photograph: the whole fascia stays in view)
-            [0.25, cx0, 0, sWide * 1.03],
-            // Fixtures chapter: the camera settles on the WHOLE interior photograph (contained, never cropped) and holds.
-            [0.4, apC.x, apC.y, sFull],
-            [0.56, apC.x, apC.y, sFull],
-            [0.62, (850 + lapCx) / 2, (580 + lapCy) / 2, 1.95 * fill],
-            [0.67, 850 + (lapCx - 850) * 0.85, 580 + (lapCy - 580) * 0.85, Math.sqrt(1.95 * fill * sLap)],
-            [0.72, lapCx, lapCy, sLap],
+            // Zoom out in ONE move straight to the full-view framing, finished by 0.25. After that the camera does not move
+            // at all until the TV approach, so the doors open on a fully zoomed-out, still shop.
+            [0.25, holdX + FIX_VIEW.x, holdY, sSee],
+            [0.37, holdX + FIX_VIEW.x, holdY, sSee], // doors are open (0.36): hold ends here
+            // Getting into the shop: ONE long glide from the open doors (0.37) to the TV filling the display (0.63). Zoom is exponential,
+            // so the framing is keyed at equal time steps with a slightly slowing log-zoom (u): a constant rate would feel like it speeds
+            // up as the TV grows, so the last stretch eases instead of rushing into the Digital chapter.
+            ...[0.2, 0.4, 0.6, 0.8].map((t, i): K => {
+              const u = [0.22, 0.44, 0.64, 0.83][i];
+              const sz = Math.exp(lerp(Math.log(sSee), Math.log(sLap), u));
+              const gg = (1 / sz - 1 / sSee) / (1 / sLap - 1 / sSee); // pan linear in view size: the TV stays on a straight line
+              return [0.37 + 0.26 * t, holdX + FIX_VIEW.x + (lapCx - holdX - FIX_VIEW.x) * gg, holdY + (lapCy - holdY) * gg, sz];
+            }),
+            [0.63, lapCx, lapCy, sLap],
             [1, lapCx, lapCy, sLap],
           ];
           // never expose the photograph's edge: clamp every key's centre to the image
           for (const kk of keys) {
+            if (kk[3] === sFull) continue; // the contained, centred full-photo frame is intentionally not clamped
             const hw = Vw / (2 * kk[3]);
             const hh = Vh / (2 * kk[3]);
             kk[1] = IMG.w < 2 * hw ? IMG.w / 2 : Math.min(IMG.w - hw, Math.max(hw, kk[1]));
@@ -310,6 +384,7 @@ export function ShopStory() {
           const inWall = p >= R.wall[0];
           vis(world, inWorld);
           vis(print, inPrint);
+          if (!inWorld) vis(cardEl, false); // the print scene starts from the card's final rectangle
           vis(wall, inWall);
 
           if (inWorld) {
@@ -317,29 +392,42 @@ export function ShopStory() {
             const cx = fns.cx(p);
             const cy = fns.cy(p);
             world.style.transform = `translate3d(${Vw / 2}px, ${Vh / 2}px, 0) scale(${s}) translate3d(${-cx}px, ${-cy}px, 0)`;
+            // the photograph is magnified far beyond its resolution while the camera closes in on the TV: soften it as depth of
+            // field (pixels merge) instead of showing blocks. Only ever applied past a safe scale.
+            // Only during the TV approach (after the Fixtures hold). The zoomed-in sign scene at the start is also above this scale
+            // and must stay sharp.
+            // NOTE: a CSS blur is applied BEFORE the element's scale, so blur(2.5px) at scale 5 looked like 12px on screen. Express it
+            // in screen pixels (divide by the camera scale): a small, constant softness, only during the approach to the TV.
+            const softPx = p > 0.57 && s > 2.6 ? 0.9 : 0;
+            world.style.filter = softPx > 0 ? `blur(${(softPx / s).toFixed(3)}px)` : "";
             // doors: both leaves, one progress, clipped inside the aperture
             const d = smooth(seg(p, R.door[0], R.door[1]));
-            // The doors and the side glass slide fully out of the doorway (behind its frame), so the whole interior
-            // photograph is unobstructed; nothing is left overlapping the picture.
+            // Only the two sliding leaves move while the doors open. They slide out of the doorway (clipped to it, behind
+            // the stationary fixed side glass, frame and jambs). The side glass is not part of the opening motion.
             const sideW = (FRONT.aperture.w - FRONT.doorW * 2) / 2;
             const exit = FRONT.doorW + sideW + 14;
             doorL.style.transform = `translate3d(${-d * exit}px,0,0)`;
             doorR.style.transform = `translate3d(${d * exit}px,0,0)`;
-            sideL.style.transform = `translate3d(${-d * (sideW + 14)}px,0,0)`;
-            sideR.style.transform = `translate3d(${d * (sideW + 14)}px,0,0)`;
             // the banner's surface settles into the fascia as the view pulls back
             tone.style.opacity = String(1 - smooth(seg(p, R.plate[0], R.plate[1])));
             // the Adinn art leaves to the left and the Havells signboard enters from the right (one progress, both inside the fascia)
+            // The board starts entering while the art is still leaving (two separate pieces sliding past each other,
+            // never overlapping), so the view is never left empty.
             const swOut = smooth(seg(p, R.swap[0], R.swap[1]));
-            const swIn = smooth(seg(p, R.swap[1], R.swap[2]));
-            sign.style.transform = `translateX(${(-swOut * (fa.w / 2 + kArt * 1000 + 24)).toFixed(2)}px)`;
-            board.style.transform = `translateX(${((1 - swIn) * (fa.w + 24)).toFixed(2)}px)`;
-            // once the frame has left the view, the doorway's interior simply continues (no swap)
-            const open = p >= R.unclip;
-            front.style.visibility = open ? "hidden" : "visible";
-            aperture.style.overflow = "hidden"; // the interior now exactly fills the doorway; the frame clips what slides out
-
-            // laptop screen: always mapped into the photographed corners; grows to full screen
+            const swIn = smooth(seg(p, R.swap[1] - 0.04, R.swap[2] - 0.01));
+            // beyond the visible window the art keeps travelling (still off-screen) until it has cleared the whole fascia, so
+            // no Adinn logo is left on the shop fascia once the camera zooms out
+            const fullOut = fa.w / 2 + kArt * 1000 + 24;
+            const extra = (fullOut - slide.out) * smooth(seg(p, R.swap[1], R.swap[2]));
+            sign.style.transform = `translateX(${(-(swOut * slide.out + extra)).toFixed(2)}px)`;
+            board.style.transform = `translateX(${((1 - swIn) * slide.inn).toFixed(2)}px)`;
+            // The doorway stays as it is after the doors open: the shop stays inside it (no widening, no backing), and the
+            // frame, jambs and fixed side glass never move. Only the two leaves slide, clipped to the doorway.
+            aperture.style.overflow = "hidden";
+            const doorsGone = d >= 1; // fully out of the doorway
+            vis(doorL, !doorsGone);
+            vis(doorR, !doorsGone);
+            // TV screen: always mapped into the photographed corners and never grows. Only the card inside it is lifted out.
             // The TV is already on: it is always there, and only the sliding door leaf covers it
             // (the clip follows the leaf's edge, so it is revealed exactly as the doors open).
             const on = true;
@@ -348,10 +436,7 @@ export function ShopStory() {
             const leafEdge = ap.x + (ap.w - FRONT.doorW * 2) / 2 + FRONT.doorW - dOpen * (FRONT.doorW - 4);
             screenClip.style.clipPath = dOpen >= 1 ? "none" : `inset(0 0 0 ${Math.max(0, (leafEdge - cx) * s + Vw / 2)}px)`;
             if (on) {
-              const g = smooth(seg(p, R.grow[0], R.grow[1]));
-              const cam = lapWorld.map((w) => ({ x: (w.x - cx) * s + Vw / 2, y: (w.y - cy) * s + Vh / 2 }));
-              const full = fillRect();
-              const inner = cam.map((c, i) => ({ x: lerp(c.x, full[i].x, g), y: lerp(c.y, full[i].y, g) }));
+              const inner = lapWorld.map((w) => ({ x: (w.x - cx) * s + Vw / 2, y: (w.y - cy) * s + Vh / 2 }));
               const Hin = solveHomography(unit, inner);
               const ex2 = BZ / SW;
               const ey2 = BZ / SH;
@@ -372,20 +457,127 @@ export function ShopStory() {
                   outer,
                 ),
               );
-              drawScreen(clamp(seg(p, R.digital[0], R.digital[1])));
+              // The campaign card comes out of the TV: ONE layer, starting exactly on the card's place in the screen and
+              // growing to the full-screen artwork (the print scene starts from the same rectangle). The screen keeps an
+              // empty slot meanwhile, so there is never a second copy.
+              const ls = smooth(seg(p, R.cardLift[0], R.cardLift[1]));
+              drawScreen(clamp(seg(p, R.digital[0], R.digital[1])), ls > 0);
+              vis(cardEl, ls > 0);
+              if (ls > 0) {
+                const ch = CARD.w / ART_ASPECT;
+                const slot = [
+                  applyH(Hin, CARD.x / SW, CARD.y / SH),
+                  applyH(Hin, (CARD.x + CARD.w) / SW, CARD.y / SH),
+                  applyH(Hin, (CARD.x + CARD.w) / SW, (CARD.y + ch) / SH),
+                  applyH(Hin, CARD.x / SW, (CARD.y + ch) / SH),
+                ];
+                const pg = printGeom(0);
+                const full: P2[] = [
+                  { x: pg.cx0 * pg.cs + pg.tx, y: pg.cy0 * pg.cs + pg.ty },
+                  { x: (pg.cx0 + pg.cardW) * pg.cs + pg.tx, y: pg.cy0 * pg.cs + pg.ty },
+                  { x: (pg.cx0 + pg.cardW) * pg.cs + pg.tx, y: (pg.cy0 + pg.cardH) * pg.cs + pg.ty },
+                  { x: pg.cx0 * pg.cs + pg.tx, y: (pg.cy0 + pg.cardH) * pg.cs + pg.ty },
+                ];
+                const tgt = slot.map((a, i) => ({ x: lerp(a.x, full[i].x, ls), y: lerp(a.y, full[i].y, ls) }));
+                cardEl.style.transform = matrix3d(solveHomography(artRect, tgt));
+              }
             }
           }
           if (inPrint) {
             const sIn = smooth(seg(p, R.reveal[0], R.reveal[1]));
             const sOut = 1 - smooth(seg(p, R.approach[0], R.approach[1]));
             const s = Math.min(sIn, sOut);
-            plateTo([printPhoto, printShade], [printArtA, printArtM], bookArt, s);
-            blend(printArtA, printArtM, printShade, s);
+            // ONE camera drives both the photograph and the card: a uniform scale + translate (the photo is never stretched). The card
+            // is fixed to the counter in IMAGE coordinates (same 16:10 artwork, nothing inside re-laid-out, never zoomed on its own):
+            // its width equals the panel's width and its text block sits on the panel. At s = 0 the camera is close enough that the panel
+            // fills the view's width; the camera then pulls back to the reading view (s = 1).
+            // 
+            const { cs, tx, ty, cx0, cy0, cardW, cardH } = printGeom(s);
+            const photoT = `translate3d(${tx}px, ${ty}px, 0) scale(${cs})`;
+            printPhoto.style.transform = photoT;
+            printShade.style.transform = photoT;
+            // The window starts as the whole card (so the first frame is identical to the Digital card) and closes to the panel's
+            // box in the first third of the pull-back, eased, while the card itself stays fixed on the counter and the camera glides.
+            const m = smooth(seg(s, 0, 0.35));
+            const wx0 = lerp(cx0, Math.max(bookArt[0].x, bookArt[3].x), m);
+            const wy0 = lerp(cy0, Math.max(bookArt[0].y, bookArt[1].y), m);
+            const wx1 = lerp(cx0 + cardW, Math.min(bookArt[1].x, bookArt[2].x), m);
+            const wy1 = lerp(cy0 + cardH, Math.min(bookArt[2].y, bookArt[3].y), m);
+            const L = wx0 * cs + tx;
+            const T = wy0 * cs + ty;
+            // the window is an axis-aligned box on an UNtransformed wrapper, so the card canvas only ever changes its transform
+            // (no clip-path repaint, no re-rasterising, nothing to shimmer)
+            printClip.style.cssText = `position:absolute;overflow:hidden;left:${L}px;top:${T}px;width:${(wx1 - wx0) * cs}px;height:${(wy1 - wy0) * cs}px`;
+            const k = (cardW * cs) / AW; // card canvas px -> screen px
+            printArtA.style.transform = `translate3d(${cx0 * cs + tx - L}px, ${cy0 * cs + ty - T}px, 0) scale(${k})`;
+            // the artwork is a printed panel on the bin: one opaque layer the whole time (no crossfade, no shade)
+            printArtA.style.opacity = "1";
+            printArtM.style.opacity = "0";
+            printShade.style.opacity = "0";
           }
           if (inWall) {
             const s = smooth(seg(p, R.wall[0], R.wall[1]));
-            plateTo([wallPhoto, wallShade], [wallArtA, wallArtM], wallArt, s);
-            blend(wallArtA, wallArtM, wallShade, s, 0);
+            // One camera (uniform scale + shift, the photograph is never stretched) carries the wall photo and the painted artwork,
+            // which is fixed to the wall plane (four-corner mapping of the measured wall face). s = 0: the camera is so close that the
+            // card at the artwork's left end fills the view (= the POP card's final frame); s = 1: the original reading framing.
+            const W2 = IMG;
+            const c1 = Math.max(Vw / W2.w, Vh / W2.h);
+            const cardCx = wallCard.reduce((a2, b2) => a2 + b2.x, 0) / 4;
+            // a narrow (portrait) view can only show a slice of the long wall: centre it on the campaign's lettering
+            const acx0 = wallArt.reduce((a2, b2) => a2 + b2.x, 0) / 4;
+            const acx = Vw < Vh ? cardCx : acx0;
+            const tx1 = Math.min(0, Math.max(Vw - W2.w * c1, Vw / 2 - acx * c1));
+            const ty1 = (Vh - W2.h * c1) / 2;
+                        const cardCy = wallCard.reduce((a2, b2) => a2 + b2.y, 0) / 4;
+            const cardImgW = (Math.hypot(wallCard[1].x - wallCard[0].x, wallCard[1].y - wallCard[0].y) + Math.hypot(wallCard[2].x - wallCard[3].x, wallCard[2].y - wallCard[3].y)) / 2;
+            const f0 = fillRect();
+            const c0 = Math.max(c1, (f0[1].x - f0[0].x) / cardImgW);
+            const cs = Math.exp(lerp(Math.log(c0), Math.log(c1), s));
+            const g = c0 === c1 ? 1 : (1 / cs - 1 / c0) / (1 / c1 - 1 / c0);
+            const fx = lerp(cardCx, (Vw / 2 - tx1) / c1, g);
+            const fy = lerp(cardCy, (Vh / 2 - ty1) / c1, g);
+            const tx = Math.min(0, Math.max(Vw - W2.w * cs, Vw / 2 - fx * cs));
+            const ty = Math.min(0, Math.max(Vh - W2.h * cs, Vh / 2 - fy * cs));
+            const wallT = `translate3d(${tx}px, ${ty}px, 0) scale(${cs})`;
+            wallPhoto.style.transform = wallT;
+            wallShade.style.transform = wallT;
+            const proj = (q2: P2[]) => q2.map((c2) => ({ x: c2.x * cs + tx, y: c2.y * cs + ty }));
+            const rectOf = (w2: number, h2: number): P2[] => [
+              { x: 0, y: 0 },
+              { x: w2, y: 0 },
+              { x: w2, y: h2 },
+              { x: 0, y: h2 },
+            ];
+            // the card's paper stays on the wall plane and dissolves underneath the pieces
+            const cardP = proj(wallCard);
+            // (the wall is photographed at a slight angle: the card settles onto it in the first fifth)
+            const ka = smooth(seg(s, 0, 0.2));
+            const cardTgt = cardP.map((q2, i) => ({ x: lerp(f0[i].x, q2.x, ka), y: lerp(f0[i].y, q2.y, ka) }));
+            const Hc = solveHomography(rectOf(AW, AH), cardTgt);
+            wallArtA.style.transform = matrix3d(Hc);
+            wallArtA.style.opacity = String(1 - smooth(seg(s, 0.25, 0.65)));
+            // the campaign pieces split off the card and each glides to its place in the wide wall composition (on the wall plane,
+            // through the same camera): start = where the piece sits on the card now, end = where it is painted on the wall
+            const Hm = solveHomography(rectOf(WALL_CW, WALL_CH), proj(wallArt));
+            const corners = (r: { x: number; y: number; w: number; h: number }) => [
+              [r.x, r.y],
+              [r.x + r.w, r.y],
+              [r.x + r.w, r.y + r.h],
+              [r.x, r.y + r.h],
+            ];
+            const delay = [0.1, 0.0, 0.12, 0.16, 0.05]; // "Be chosen." leads so it clears the end of "Be seen." as that line grows
+            wallEls.forEach((el, i) => {
+              const part = wallParts[i];
+              if (!part) return;
+              const d0 = delay[i] ?? 0.05;
+              const e = smooth(seg(s, d0, d0 + 0.5));
+              const c0s = corners(part.card).map(([x, y]) => applyH(Hc, x, y));
+              const c1s = corners(part.wall).map(([x, y]) => applyH(Hm, x, y));
+              const tg = c0s.map((q2, k) => ({ x: lerp(q2.x, c1s[k].x, e), y: lerp(q2.y, c1s[k].y, e) }));
+              el.style.transform = matrix3d(solveHomography(rectOf(part.w, part.h), tg));
+              el.style.opacity = "1";
+            });
+            wallShade.style.opacity = "0";
           }
           const copy = SHOP.copy;
           for (const el of copies) {
@@ -416,6 +608,17 @@ export function ShopStory() {
           stage.style.pointerEvents = on ? "" : "none";
         };
         showStage(false);
+        // show only once the layers are decoded and measured (a refresh mid-chapter must not flash an unplaced frame)
+        // Visible whenever the chapter is active or already passed (progress > 0), once its layers are decoded. Never
+        // compare scroll() to start: onEnter fires a few px early (anticipatePin) and a failed compare would leave the
+        // stage hidden (white page) for the whole chapter. Re-evaluated on every update, so it can never stick hidden.
+        let shown = false;
+        const syncStage = (t: ScrollTrigger) => {
+          const on = ready && (t.isActive || t.progress > 0);
+          if (on === shown) return;
+          shown = on;
+          showStage(on);
+        };
         let target = 0;
         let cur = 0;
         const glide = (_t: number, dt: number) => {
@@ -442,20 +645,26 @@ export function ShopStory() {
           invalidateOnRefresh: true,
           // The stage stays hidden until the Outdoor chapter's pin ends, then takes over the same
           // frame in place (its first frame is the Outdoor end frame), so there is no seam.
-          onEnter: () => {
-            showStage(true);
-          },
+          onEnter: (self) => syncStage(self),
           onLeaveBack: () => {
+            shown = false;
             showStage(false);
           },
           onRefresh: (self) => {
             target = cur = self.progress;
             state.p = cur;
-            showStage(self.scroll() >= self.start - 1);
+            syncStage(self);
             render();
           },
           onUpdate: (self) => {
+            syncStage(self);
             target = self.progress;
+            // a programmatic jump (refresh restore, skip link) lands on the new frame instead of gliding through the chapters
+            if (ready && Math.abs(self.progress - cur) > 0.12) {
+              cur = target;
+              state.p = cur;
+              render();
+            }
           },
         });
 
@@ -475,6 +684,10 @@ export function ShopStory() {
           paintArt();
           ready = true;
           layout();
+          target = cur = st.progress;
+          state.p = cur;
+          render();
+          syncStage(st);
         };
         const io = new IntersectionObserver(
           (entries) => {
@@ -496,8 +709,9 @@ export function ShopStory() {
           rootEl.removeAttribute("data-live");
           rootEl.style.removeProperty("--vs-header");
           for (const prop of ["position", "z-index", "margin-top"]) rootEl.style.removeProperty(prop);
-          for (const el of [world, doorL, doorR, sideL, sideR, front, tone, aperture, interior, screen, screenClip, print, printPhoto, printArtA, printArtM, printShade, printShade, wall, wallPhoto, wallArtA, wallArtM, wallShade, wallShade, ...copies])
-            for (const prop of ["transform", "opacity", "visibility", "overflow"]) el.style.removeProperty(prop);
+          for (const el of [world, doorL, doorR, sideL, sideR, front, tone, aperture, interior, screen, screenClip, cardEl, print, printPhoto, printArtA, printArtM, printShade, printShade, wall, wallPhoto, wallArtA, ...wallEls, wallShade, wallShade, ...copies])
+            for (const prop of ["transform", "opacity", "visibility", "overflow", "filter"]) el.style.removeProperty(prop);
+          screenClip.style.removeProperty("clip-path"); // set by render(); never strip `front`'s doorway cut-out (it comes from the markup)
           stage.style.removeProperty("opacity");
           stage.style.removeProperty("pointer-events");
           sign.style.removeProperty("transform");
@@ -520,7 +734,7 @@ export function ShopStory() {
         {SHOP_COPY.map((c, i) => (
           <article key={c.id} className="sh-card">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={staticImgs[i]} alt="" width={IMG.w} height={IMG.h} loading="lazy" decoding="async" />
+            <img src={staticImgs[i]} alt="" width={staticImgs[i] === FILES.printing ? PRINT_IMG.w : IMG.w} height={staticImgs[i] === FILES.printing ? PRINT_IMG.h : IMG.h} loading="lazy" decoding="async" />
             <div>
               <p className="sh-kicker">{c.label}</p>
               <h3 className="sh-h">{c.heading}</h3>
@@ -553,18 +767,22 @@ export function ShopStory() {
         <div className="sh-screenclip" data-screenclip="" aria-hidden="true">
           <canvas className="sh-screen" data-screen="" aria-hidden="true" />
         </div>
+        {/* the campaign card, lifted out of the TV (one layer; transform set in render) */}
+        <canvas className="sh-art" data-card="" aria-hidden="true" style={{ visibility: "hidden" }} />
 
         {/* printing & POP plate */}
         <div className="sh-layer" data-print="" aria-hidden="true">
-          <div className="sh-plate" data-print-photo="" style={{ width: IMG.w, height: IMG.h }}>
+          <div className="sh-plate" data-print-photo="" style={{ width: PRINT_IMG.w, height: PRINT_IMG.h }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img data-sh="" className="sh-fill" src={FILES.printing} alt="" width={IMG.w} height={IMG.h} loading="lazy" />
+            <img data-sh="" className="sh-fill" src={FILES.printing} alt="" width={PRINT_IMG.w} height={PRINT_IMG.h} loading="lazy" />
           </div>
-          <canvas className="sh-art" data-print-a="" />
-          <canvas className="sh-art sh-art-m" data-print-m="" />
-          <div className="sh-plate sh-shade" data-print-shade="" style={{ width: IMG.w, height: IMG.h }}>
+          <div data-print-clip="" style={{ position: "absolute", overflow: "hidden" }}>
+            <canvas className="sh-art" data-print-a="" style={{ willChange: "transform" }} />
+          </div>
+          <canvas className="sh-art sh-art-m sh-art-n" data-print-m="" />
+          <div className="sh-plate sh-shade" data-print-shade="" style={{ width: PRINT_IMG.w, height: PRINT_IMG.h }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="sh-fill" src={FILES.printing} alt="" width={IMG.w} height={IMG.h} loading="lazy" />
+            <img className="sh-fill" src={FILES.printing} alt="" width={PRINT_IMG.w} height={PRINT_IMG.h} loading="lazy" />
           </div>
         </div>
 
@@ -575,7 +793,9 @@ export function ShopStory() {
             <img data-sh="" className="sh-fill" src={FILES.wall} alt="" width={IMG.w} height={IMG.h} loading="lazy" />
           </div>
           <canvas className="sh-art" data-wall-a="" />
-          <canvas className="sh-art sh-art-m sh-paint" data-wall-m="" />
+          {[0, 1, 2, 3, 4].map((i) => (
+            <canvas key={i} className="sh-art sh-art-m" data-wall-e={i} />
+          ))}
           <div className="sh-plate sh-shade" data-wall-shade="" style={{ width: IMG.w, height: IMG.h }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="sh-fill" src={FILES.wall} alt="" width={IMG.w} height={IMG.h} loading="lazy" />
@@ -588,6 +808,18 @@ export function ShopStory() {
         <div className="sh-copies">
           {SHOP_COPY.map((c) => (
             <div key={c.id} className="sh-copy" data-copy={c.id}>
+              {c.id === "wall" && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    zIndex: -1,
+                    inset: "-3rem -5rem -2.5rem -5rem",
+                    pointerEvents: "none",
+                    background: "radial-gradient(closest-side at 40% 60%, rgba(0,0,0,0.45), rgba(0,0,0,0))",
+                  }}
+                />
+              )}
               <h2 className="sh-h">{c.heading}</h2>
               <p className="sh-sub">{c.body}</p>
               <Link href={enquiryHref(`service:${c.service}`)} className="btn btn-inverse mt-4">

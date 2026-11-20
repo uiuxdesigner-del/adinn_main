@@ -21,3 +21,15 @@ All scroll stories and animated sections (shop story, outdoor billboard, home se
 ## Reference fix
 
 `components/shop/shop-art.ts` `drawDigital`: the creative card used to be drawn twice (small card in the page, then a bigger copy fading in over it), which doubled "Be seen / Be chosen". It is now one card that grows from the card position to full screen, while the page dissolves underneath it.
+
+## Regression check: Outdoor banner -> Havells signage -> shop (white-screen handoff)
+
+Run this after ANY change to `components/shop/shop-story.tsx`, `shop-config.ts` (`R.swap`, camera keys), `storefront-scene.tsx`, `components/outdoor/*` or `components/motion/smooth-scroll.tsx`.
+
+Sequence that must hold: banner zoom -> Havells board enters from the RIGHT while the Adinn art leaves left -> brief hold -> zoom out to the shop. No frame may be blank/white.
+
+Past causes (do not reintroduce):
+1. The shop stage is revealed by `syncStage` in `shop-story.tsx`. Never gate it on `scroll() >= start`: `onEnter` fires a few px early (`anticipatePin`), the compare fails, nothing re-runs it, and the stage stays at opacity 0 (white page) for the whole chapter. Gate on `isActive || progress > 0` and re-sync in `onUpdate`.
+2. Sign slide distances are in storefront units while the camera is zoomed ~3.9x (view ~370 units wide). Distances must be sized to the visible width (`slide.out` / `slide.inn`), and the board must start entering before the art has fully left.
+
+How to verify (real wheel input, not only `scrollTo`, which skips the crossing): scroll slowly with `mouse.wheel` from p = -0.04 to 0.2 at desktop and ~390px width, then back; fast 500px wheel flicks across the boundary and stop mid-swap; reload at p = -0.01, 0.03, 0.06, 0.1, 0.2. Screenshot every step; each frame below the header needs real content (the Adinn art, the red board, or the shop). Also read `#shop-story [data-stage]` `style.opacity`: it must be `1` while the pin is active.

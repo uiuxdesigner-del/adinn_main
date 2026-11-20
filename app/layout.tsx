@@ -29,7 +29,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${poppins.variable} h-full antialiased`}>
+    <html lang="en" className={`${poppins.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        {/* On a reload / back-forward with a saved scroll position, keep the pinned stories hidden until SmoothScroll has
+            restored the scroll AND synced their animation state (removes data-restoring), so the opening is never shown. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{var n=performance.getEntriesByType("navigation")[0];if(n&&(n.type==="reload"||n.type==="back_forward")&&Number(sessionStorage.getItem("adinn:scroll:"+location.pathname))>0)document.documentElement.setAttribute("data-restoring","");setTimeout(function(){document.documentElement.removeAttribute("data-restoring")},6000)}catch(e){}',
+          }}
+        />
+      </head>
       <body className="flex min-h-full flex-col bg-white text-ink">
         <ReviewNotesProvider>
           <a

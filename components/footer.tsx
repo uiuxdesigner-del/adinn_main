@@ -17,7 +17,6 @@ export function Footer() {
     const url = safeHttpUrl(s.url);
     return url ? [{ label: s.label, url }] : [];
   });
-  const anyPending = verticals.some((v) => !v.url);
 
   return (
     <footer className="mt-auto bg-line px-3 py-3 md:px-5 md:py-5">
@@ -92,26 +91,12 @@ export function Footer() {
             <ul className="mt-3 grid gap-x-6 gap-y-2 text-ash sm:grid-cols-2 lg:grid-cols-1">
               {verticals.map((v) => (
                 <li key={v.id}>
-                  {v.url ? (
-                    <a href={v.url} className={linkClass}>
-                      {v.name}
-                      <span className="sr-only"> (external website)</span>
-                      <span aria-hidden="true">&nbsp;↗</span>
-                    </a>
-                  ) : (
-                    <span>
-                      {v.name}
-                      <span className="sr-only">: website link awaiting confirmation</span>
-                    </span>
-                  )}
+                  <Link href={`/verticals/${v.id}`} className={linkClass}>
+                    {v.name}
+                  </Link>
                 </li>
               ))}
             </ul>
-            {anyPending && (
-              <p className="text-note mt-3 text-ash">
-                Website links are awaiting confirmation.
-              </p>
-            )}
           </nav>
 
           <nav aria-label="Footer: company">

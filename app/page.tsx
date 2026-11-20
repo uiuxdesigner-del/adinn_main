@@ -55,6 +55,7 @@ export default function HomePage() {
       <Hero />
       <ClientsShowcase campaigns={campaigns} />
       <Solutions />
+      <Services />
       <StoryIntro />
       {ENABLE_OOH_STORY ? (
         <>
@@ -64,9 +65,8 @@ export default function HomePage() {
       ) : (
         <VisualStory />
       )}
-      <Services />
-      <Cases />
       <WhyAdinn />
+      <Cases />
       <FinalConversion />
     </>
   );

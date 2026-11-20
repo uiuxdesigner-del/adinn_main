@@ -24,7 +24,7 @@ export default function WorkPage() {
       <Container className="pb-10 md:pb-14">
         <ul className="grid gap-6 md:grid-cols-2">
           {cases.map((c) => (
-            <li key={c.id} className="flex flex-col rounded-2xl border border-line p-6">
+            <li key={c.id} id={c.id} className="flex flex-col rounded-2xl border border-line p-6">
               <div className="flex h-16 items-center">
                 {c.logo && (
                   <Image

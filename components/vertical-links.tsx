@@ -1,13 +1,18 @@
+import Link from "next/link";
 import { StaggerList } from "@/components/motion/reveal";
-import { ExternalLink, PendingStatus, Photo } from "@/components/ui";
+import { ExternalLink, Photo } from "@/components/ui";
 import { verticals, type Vertical } from "@/lib/verticals";
 
-/** Link to the vertical's existing website, or a pending status. */
+/** Link to the vertical's dedicated page (and, once supplied, its own website). */
 export function VerticalAction({ vertical }: { vertical: Vertical }) {
-  return vertical.url ? (
-    <ExternalLink href={vertical.url}>{vertical.action}</ExternalLink>
-  ) : (
-    <PendingStatus>Website link awaiting confirmation.</PendingStatus>
+  return (
+    <span className="flex flex-wrap items-center gap-x-5 gap-y-1">
+      <Link href={`/verticals/${vertical.id}`} className="link inline-block py-1">
+        {vertical.action}
+        <span aria-hidden="true"> →</span>
+      </Link>
+      {vertical.url && <ExternalLink href={vertical.url}>Visit website</ExternalLink>}
+    </span>
   );
 }
 

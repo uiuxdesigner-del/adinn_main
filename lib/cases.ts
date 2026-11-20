@@ -29,7 +29,7 @@ export const cases: CaseStudy[] = [
     logo: { file: "spr-india", w: 547, h: 700 },
     video: film("spr"),
     note: "The film describes this as out-of-home work strategized and executed by Adinn.",
-    details: {},
+    details: { services: ["Outdoor / OOH"] },
   },
   { id: "dalmia-cement", client: "Dalmia Cement", logo: { file: "dalmia", w: 700, h: 357 }, video: film("dalmia"), note: null, details: {} },
   { id: "hatsun", client: "Hatsun", logo: { file: "hatsun", w: 700, h: 211 }, video: film("hatsun"), note: null, details: {} },

@@ -51,7 +51,7 @@ const newKey = () =>
  * page, UTM parameters, preselected interest) is read after mount, so server and first client
  * render match.
  */
-export function EnquiryForm({ source = "contact" }: { source?: string }) {
+export function EnquiryForm({ source = "contact", submitLabel = "Send Enquiry" }: { source?: string; submitLabel?: string }) {
   const [values, setValues] = useState<Values>(empty);
   const [errors, setErrors] = useState<EnquiryErrors>({});
   const [status, setStatus] = useState<Status>("idle");
@@ -405,7 +405,7 @@ export function EnquiryForm({ source = "contact" }: { source?: string }) {
         .
       </p>
       <button type="submit" className="btn btn-primary mt-5" disabled={status === "sending"}>
-        {status === "sending" ? "Sending…" : "Send Enquiry"}
+        {status === "sending" ? "Sending…" : submitLabel}
       </button>
     </form>
   );

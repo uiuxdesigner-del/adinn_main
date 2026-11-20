@@ -57,3 +57,8 @@ Visible image captions were removed. Photographs are general-purpose illustratio
 - `public/clients/*.webp`: official logo files published on adinn.com (downloaded 2026-11-14), trimmed of empty margins only: Havells, Honda, Maruti Suzuki, Royal Enfield, Daikin, Milky Mist, KFC, Burger King, Indian Overseas Bank, plus SPR India, Dalmia Cement and Hatsun (shown on case cards). They are third-party trademarks. Written client permission is still to be recorded; set `confirmed: false` in `lib/clients.ts` to withdraw one.
 - Campaign films (`spr`, `dalmia`, `hatsun`, `havells`) are hosted by Adinn at adinn.com/projects/*.mp4 and load only when a visitor presses play. They are not copied into this repo.
 - The homepage opening uses `public/story/roadshow-1200.webp`, an image published on adinn.com. It looks computer-generated, not like a photograph of a delivered campaign; replace with real campaign photography.
+
+## Homepage "Eight connected services" carousel (`components/home/services-carousel.tsx`)
+
+- Uses the eight adinn.com service images already in `public/story/*-1200.webp` (see "Visual story" above) as both the thumbnails and the large picture. No new images were downloaded: they are Adinn's own published scenes and match the subjects, whereas web image search results would need per-image licences.
+- Copy comes from `lib/services.ts` (`achieves` as the heading, `delivers` as the body) and `lib/verticals.ts` (label and CTA). Same caveat as the story: the scenes look computer-generated and are not presented as specific client work.

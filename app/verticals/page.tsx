@@ -11,16 +11,16 @@ export default function VerticalsPage() {
       <PageHeader
         title="Find the right team for your next move."
         note={{
-          purpose: "Directory that sends visitors to each existing vertical website.",
-          needed: ["Website URL for each vertical in config/site.ts."],
+          purpose: "Directory that sends visitors to each service page.",
+          needed: ["Optional: website URL for each vertical in config/site.ts (shown as a second link when supplied)."],
           awaiting: [
-            "Descriptions are draft. Photographs are illustrative stock; missing URLs show a pending status.",
+            "Descriptions are draft. Photographs are illustrative stock.",
           ],
         }}
       >
         <p>
-          Adinn’s work is organised into eight teams, and each has its own
-          website. Pick the one closest to your brief. If your brief spans
+          Adinn’s work is organised into eight services, and each has its own
+          page. Pick the one closest to your brief. If your brief spans
           several, tell us once and we’ll bring the right teams together.
         </p>
       </PageHeader>

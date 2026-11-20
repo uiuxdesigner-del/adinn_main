@@ -1,4 +1,4 @@
-import { BOARD, FILES, FRONT, IMG, interiorPlace } from "./shop-config";
+import { BG, BG_SRC, BOARD, BOARD_PANEL, FILES, FRONT, interiorPlace } from "./shop-config";
 
 /**
  * The storefront as one registered world (1672x941): photograph, doorway (interior behind two
@@ -11,14 +11,25 @@ export function StorefrontScene({ light = false }: { light?: boolean }) {
   const fa = FRONT.fascia;
   const ap = FRONT.aperture;
   const side = (ap.w - FRONT.doorW * 2) / 2;
-  const hole = `polygon(evenodd, 0 0, ${IMG.w}px 0, ${IMG.w}px ${IMG.h}px, 0 ${IMG.h}px, 0 0, ${ap.x}px ${ap.y}px, ${ap.x}px ${ap.y + ap.h}px, ${ap.x + ap.w}px ${ap.y + ap.h}px, ${ap.x + ap.w}px ${ap.y}px, ${ap.x}px ${ap.y}px)`;
+  // The exterior photo is larger than the world (BG), so its clip polygon is expressed in the image's own box: world coords minus BG's offset.
+  const ax = ap.x - BG.x;
+  const ay = ap.y - BG.y;
+  // Only a thin ring around the doorway needs the second copy of the photograph (it covers the antialiased edge of the
+  // clipped doorway). Painting a full-size second copy every frame was what made slower machines show unpainted gray tiles.
+  const m = 10;
+  const ox0 = ax - m;
+  const oy0 = ay - m;
+  const ox1 = ax + ap.w + m;
+  const oy1 = ay + ap.h + m;
+  const hole = `polygon(evenodd, ${ox0}px ${oy0}px, ${ox1}px ${oy0}px, ${ox1}px ${oy1}px, ${ox0}px ${oy1}px, ${ox0}px ${oy0}px, ${ax}px ${ay}px, ${ax}px ${ay + ap.h}px, ${ax + ap.w}px ${ay + ap.h}px, ${ax + ap.w}px ${ay}px, ${ax}px ${ay}px)`;
+  const bgBox = { left: BG.x, top: BG.y, width: BG.w, height: BG.h };
   const k = fa.h / 970;
   return (
     <>
       {!light && (
         <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img data-sh="" className="sh-fill" src={FILES.storefront} alt="" width={IMG.w} height={IMG.h} loading="lazy" />
+      <img data-sh="" className="sh-bg" src={FILES.storefrontWide} alt="" width={BG_SRC.w} height={BG_SRC.h} loading="lazy" style={bgBox} />
       <div className="sh-aperture" data-aperture="" style={{ left: ap.x, top: ap.y, width: ap.w, height: ap.h, background: "#1b1a1c" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -38,7 +49,7 @@ export function StorefrontScene({ light = false }: { light?: boolean }) {
         <span className="sh-side" data-side-r="" style={{ right: 0, width: side }} />
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img data-sh="" data-front="" className="sh-fill sh-front" src={FILES.storefront} alt="" width={IMG.w} height={IMG.h} loading="lazy" style={{ clipPath: hole }} />
+      <img data-sh="" data-front="" className="sh-bg sh-front" src={FILES.storefrontWide} alt="" width={BG_SRC.w} height={BG_SRC.h} loading="lazy" style={{ ...bgBox, clipPath: hole }} />
         </>
       )}
       <div className="sh-tone" data-tone="" style={{ left: fa.x, top: fa.y, width: fa.w, height: fa.h }} />
@@ -74,23 +85,24 @@ export function StorefrontScene({ light = false }: { light?: boolean }) {
               </span>
             </div>
           </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="sh-havells"
+          {/* The shop's own sign board: a full-width lit red fascia panel (frame, rim lights, depth) that carries the supplied
+              Havells Galaxy sign at its natural proportions; the panel's red continues seamlessly each side of the sign. */}
+          <div
+            className="sh-havells sh-board"
             data-havells=""
-            src={FILES.board}
-            alt="Havells Galaxy signboard"
-            width={Math.round(fa.h * BOARD.heightFrac * BOARD.aspect)}
-            height={Math.round(fa.h * BOARD.heightFrac)}
-            decoding="async"
+            role="img"
+            aria-label="Havells Galaxy signboard"
             style={{
-              left: (fa.w - fa.h * BOARD.heightFrac * BOARD.aspect) / 2,
-              top: (fa.h * (1 - BOARD.heightFrac)) / 2,
-              width: fa.h * BOARD.heightFrac * BOARD.aspect,
-              height: fa.h * BOARD.heightFrac,
+              left: fa.w * BOARD_PANEL.inset,
+              top: fa.h * BOARD_PANEL.insetY,
+              width: fa.w * (1 - 2 * BOARD_PANEL.inset),
+              height: fa.h * (1 - 2 * BOARD_PANEL.insetY),
               transform: `translateX(${fa.w}px)`,
             }}
-          />
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="sh-board-img" src={FILES.board} alt="" decoding="async" style={{ aspectRatio: String(BOARD.aspect) }} />
+          </div>
         </div>
       )}
     </>
