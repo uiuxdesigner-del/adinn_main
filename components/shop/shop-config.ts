@@ -86,6 +86,7 @@ export const FILES = {
   storefront: "/shop/signage-storefront.webp", // original 1672x941 photo (static no-JS fallback only)
   storefrontWide: "/shop/storefront-wide.webp", // extended exterior (1851x849), registered into the 1672x941 world by BG below
   interior: "/shop/interior-hd.webp", // 2x Lanczos + light sharpen of interior-matched.webp (same framing), so the close approach to the TV is less soft
+  interiorLite: "/shop/interior-matched.webp", // same framing at half the pixels: always rendered under the HD interior (never swapped out), so the doorway can never be empty
   doorL: "/shop/door-left.webp",
   doorR: "/shop/door-right.webp",
   printing: "/shop/printing-pop-wide.webp", // wide retail long-shot (1774x887) with the central red POP display

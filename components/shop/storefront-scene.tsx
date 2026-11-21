@@ -1,3 +1,4 @@
+import { BOARD_PAD } from "./board-art";
 import { BG, BG_SRC, BOARD, BOARD_PANEL, FILES, FRONT, interiorPlace } from "./shop-config";
 
 /**
@@ -21,7 +22,14 @@ export function StorefrontScene({ light = false }: { light?: boolean }) {
   const oy0 = ay - m;
   const ox1 = ax + ap.w + m;
   const oy1 = ay + ap.h + m;
-  const hole = `polygon(evenodd, ${ox0}px ${oy0}px, ${ox1}px ${oy0}px, ${ox1}px ${oy1}px, ${ox0}px ${oy1}px, ${ox0}px ${oy0}px, ${ax}px ${ay}px, ${ax}px ${ay + ap.h}px, ${ax + ap.w}px ${ay + ap.h}px, ${ax + ap.w}px ${ay}px, ${ax}px ${ay}px)`;
+  const R = BG.w;
+  const B = BG.h;
+  const ring = [
+    `inset(${oy0}px ${R - ox1}px ${B - ay}px ${ox0}px)`, // top
+    `inset(${ay + ap.h}px ${R - ox1}px ${B - oy1}px ${ox0}px)`, // bottom
+    `inset(${ay}px ${R - ax}px ${B - (ay + ap.h)}px ${ox0}px)`, // left
+    `inset(${ay}px ${R - ox1}px ${B - (ay + ap.h)}px ${ax + ap.w}px)`, // right
+  ];
   const bgBox = { left: BG.x, top: BG.y, width: BG.w, height: BG.h };
   const k = fa.h / 970;
   return (
@@ -31,9 +39,14 @@ export function StorefrontScene({ light = false }: { light?: boolean }) {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img data-sh="" className="sh-bg" src={FILES.storefrontWide} alt="" width={BG_SRC.w} height={BG_SRC.h} loading="lazy" style={bgBox} />
       <div className="sh-aperture" data-aperture="" style={{ left: ap.x, top: ap.y, width: ap.w, height: ap.h, background: "#1b1a1c" }}>
+        {/* The doorway photograph is two stacked copies with identical framing: a light one that is always there (decoded before the
+            stage is shown, never hidden or swapped out) and the HD one on top. If the HD copy is ever late or fails, the light one
+            is what shows, at the same position and size, so the doorway is never empty. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img data-sh="" data-interior-base="" className="sh-interior" src={FILES.interiorLite} alt="" loading="lazy" style={{ left: interiorPlace.x - ap.x, top: interiorPlace.y - ap.y, width: interiorPlace.w, height: interiorPlace.h }} />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          data-sh=""
+          data-hd=""
           data-interior=""
           className="sh-interior"
           src={FILES.interior}
@@ -48,8 +61,15 @@ export function StorefrontScene({ light = false }: { light?: boolean }) {
         <span className="sh-side" data-side-l="" style={{ left: 0, width: side }} />
         <span className="sh-side" data-side-r="" style={{ right: 0, width: side }} />
       </div>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img data-sh="" data-front="" className="sh-bg sh-front" src={FILES.storefrontWide} alt="" width={BG_SRC.w} height={BG_SRC.h} loading="lazy" style={{ ...bgBox, clipPath: hole }} />
+      {/* The ring of photograph around the doorway, as four plain rectangular clips (top, bottom, left, right) instead of one
+          full-size image cut by an even-odd polygon: a polygon mask on a photo magnified ~4x was far more than slower GPUs can
+          raster, so the photograph and interior stayed unpainted (grey stage) during the zoom-out. Rect clips are cheap. */}
+      <div data-front="" className="sh-front" style={{ position: "absolute", left: 0, top: 0, width: 0, height: 0 }}>
+        {ring.map((inset, i) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={i} data-sh="" className="sh-bg" src={FILES.storefrontWide} alt="" width={BG_SRC.w} height={BG_SRC.h} loading="lazy" style={{ ...bgBox, clipPath: inset }} />
+        ))}
+      </div>
         </>
       )}
       <div className="sh-tone" data-tone="" style={{ left: fa.x, top: fa.y, width: fa.w, height: fa.h }} />
@@ -93,15 +113,23 @@ export function StorefrontScene({ light = false }: { light?: boolean }) {
             role="img"
             aria-label="Havells Galaxy signboard"
             style={{
-              left: fa.w * BOARD_PANEL.inset,
-              top: fa.h * BOARD_PANEL.insetY,
-              width: fa.w * (1 - 2 * BOARD_PANEL.inset),
-              height: fa.h * (1 - 2 * BOARD_PANEL.insetY),
+              // PAD larger than the panel on every side (room for the drop shadow and frame, all painted inside this box; see .sh-board in globals.css)
+              left: fa.w * BOARD_PANEL.inset - BOARD_PAD,
+              top: fa.h * BOARD_PANEL.insetY - BOARD_PAD,
+              width: fa.w * (1 - 2 * BOARD_PANEL.inset) + BOARD_PAD * 2,
+              height: fa.h * (1 - 2 * BOARD_PANEL.insetY) + BOARD_PAD * 2,
               transform: `translateX(${fa.w}px)`,
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img className="sh-board-img" src={FILES.board} alt="" decoding="async" style={{ aspectRatio: String(BOARD.aspect) }} />
+            {/* Painted once by paintBoard() (board-art.ts) as a finished bitmap; the CSS layers below are the identical-looking fallback,
+                shown only until the canvas has painted (or if it cannot). */}
+            <canvas className="sh-board-cv" data-board-cv="" />
+            <span className="sh-board-drop" />
+            <span className="sh-board-frame" />
+            <div className="sh-board-in">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img data-sh="" data-board-img="" className="sh-board-img" src={FILES.board} alt="" decoding="async" style={{ aspectRatio: String(BOARD.aspect) }} />
+            </div>
           </div>
         </div>
       )}

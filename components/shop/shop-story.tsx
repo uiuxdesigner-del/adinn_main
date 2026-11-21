@@ -6,6 +6,7 @@ import { gsap, ScrollTrigger, useGSAP } from "@/lib/gsap";
 import { enquiryHref } from "@/lib/navigation";
 import { matrix3d, solveHomography, type P2 } from "../outdoor/geometry";
 import { ART_ASPECT, CARD_DESIGN, CARD_RADIUS_FRAC, DESIGN_H, DESIGN_W, canvasOf, drawArtwork, drawDigital, artParts, type ArtPart } from "./shop-art";
+import { BOARD_PAD, boardPanel, paintBoard } from "./board-art";
 import { StorefrontScene } from "./storefront-scene";
 import {
   BOARD_PANEL,
@@ -142,7 +143,8 @@ export function ShopStory() {
         const front = q("[data-front]");
         const tone = q("[data-tone]");
         const aperture = q("[data-aperture]");
-        const interior = q("[data-interior]");
+        const interior = q<HTMLImageElement>("[data-interior]");
+        const interiorBase = q<HTMLImageElement>("[data-interior-base]");
         const sign = q("[data-sign]");
         const board = q("[data-havells]");
         const kArt = FRONT.fascia.h / 970;
@@ -202,6 +204,22 @@ export function ShopStory() {
           sctx.roundRect(0, 0, screen.width, screen.height, 36);
           sctx.fill();
           sctx.drawImage(ui, BZ, BZ);
+        };
+        // The Havells board is painted once into a canvas (board-art.ts) at the largest zoom it is seen at, so while the camera
+        // moves the compositor only scales a finished bitmap. The CSS version stays as the fallback until this has painted.
+        let boardZoom = 1;
+        let bakedScale = 0;
+        const bakeBoard = () => {
+          const cv = board.querySelector<HTMLCanvasElement>("[data-board-cv]");
+          const im = board.querySelector<HTMLImageElement>("[data-board-img]");
+          if (!cv || !im) return;
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          const want = Math.min(Math.max(boardZoom, 1) * dpr, 8192 / (boardPanel().w + BOARD_PAD * 2));
+          if (bakedScale && want <= bakedScale * 1.15 && want >= bakedScale / 1.6) return;
+          if (paintBoard(cv, im, want)) {
+            bakedScale = want;
+            board.setAttribute("data-baked", "");
+          }
         };
         const paintArt = () => {
           drawArtwork(actx, AW, AH, font, logoImg);
@@ -317,6 +335,7 @@ export function ShopStory() {
           const sFascia = Math.max(cover, portrait ? Math.min(Vw / (2000 * kArt), Vh / fa.h) : Math.max(Vw / (2000 * kArt), Vh / fa.h));
           const sWide = portrait ? Math.max(Vw / 760, (Vh / IMG.h) * 1.02) : Math.max(Vw / 1440, Math.max(Vw / IMG.w, Vh / IMG.h) * 1.02);
           // the whole interior photograph (as placed in the doorway) fits the view
+          boardZoom = sFascia;
           const visHalf = Vw / (2 * sFascia);
           const boardW = fa.w * (1 - 2 * BOARD_PANEL.inset);
           slide.out = Math.min(fa.w / 2 + kArt * 1000 + 24, visHalf + kArt * 1000 + 12);
@@ -430,7 +449,8 @@ export function ShopStory() {
             // TV screen: always mapped into the photographed corners and never grows. Only the card inside it is lifted out.
             // The TV is already on: it is always there, and only the sliding door leaf covers it
             // (the clip follows the leaf's edge, so it is revealed exactly as the doors open).
-            const on = true;
+            // ...and only while its interior photograph (either copy: the HD one or the light one under it) is decoded, so it can never float alone
+            const on = [interior, interiorBase].some((im) => im.complete && im.naturalWidth > 0);
             vis(screen, on);
             const dOpen = smooth(seg(p, R.door[0], R.door[1]));
             const leafEdge = ap.x + (ap.w - FRONT.doorW * 2) / 2 + FRONT.doorW - dOpen * (FRONT.doorW - 4);
@@ -595,6 +615,7 @@ export function ShopStory() {
           rootEl.style.zIndex = "2";
           rootEl.style.marginTop = `${-Vh}px`;
           buildKeys();
+          if (ready) bakeBoard();
           render();
         };
 
@@ -675,12 +696,22 @@ export function ShopStory() {
           font = getComputedStyle(rootEl).fontFamily;
           const imgs = Array.from(stage.querySelectorAll<HTMLImageElement>("img[data-sh]"));
           imgs.forEach((i) => (i.loading = "eager"));
+          // The HD doorway photograph is not waited for (the story must never be held back by it): it decodes in the background
+          // and is only made visible once decoded. Until then, and if it fails, the light copy underneath is what shows.
+          interior.loading = "eager";
+          interior
+            .decode()
+            .then(() => {
+              if (!cancelled) interior.setAttribute("data-ready", "");
+            })
+            .catch(() => undefined);
           await Promise.all([
             document.fonts.ready,
             ...imgs.map((i) => i.decode().catch(() => undefined)),
             logoImg.decode().catch(() => undefined),
           ]);
           if (cancelled) return;
+          bakeBoard();
           paintArt();
           ready = true;
           layout();
@@ -716,6 +747,8 @@ export function ShopStory() {
           stage.style.removeProperty("pointer-events");
           sign.style.removeProperty("transform");
           board.style.removeProperty("transform");
+          board.removeAttribute("data-baked");
+          interior.removeAttribute("data-ready");
         };
       });
     },

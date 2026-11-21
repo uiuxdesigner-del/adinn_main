@@ -1012,6 +1012,10 @@ html.lenis body {
   position: absolute;
   max-width: none;
 }
+/* the HD copy only appears once decoded; the light copy under it is always visible */
+.sh-interior[data-hd]:not([data-ready]) {
+  visibility: hidden;
+}
 .sh-screenclip {
   position: absolute;
   inset: 0;
@@ -1390,7 +1394,55 @@ html[data-restoring] #shop-story {
 
 /* Shop sign board: a lit red panel across the fascia with a frame, rim lights and depth. The supplied Havells sign sits in the
    middle at its natural proportions and fades into the same red, so the board reads as one real sign, not a sticker on white. */
-.sh-board {
+/* Everything the board paints sits inside its own box. The same look (three frame rings, soft drop shadow) drawn OUTSIDE the
+   element with box-shadow made the browser repaint a huge blurred surface at every camera scale, which is what left the sign
+   torn and the storefront unpainted on slower machines (measured: removing only the outset shadows removed ~85% of the gray).
+   - .sh-board       outer box: PAD (48px) larger than the panel on every side; carries the slide transform.
+   - .sh-board-drop  the soft drop shadow (0 14px 26px .35) as a separable Gaussian profile: two gradient masks, no blur.
+   - .sh-board-frame the three rings (5px light, 2px grey, 1px dark) as inset shadows, 8px wide in total.
+   - .sh-board-in    the red panel itself. */
+.sh-board-cv {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+}
+/* once the canvas has painted the board, the live CSS layers are removed entirely (no repaint cost) */
+.sh-board[data-baked] > .sh-board-cv {
+  display: block;
+}
+.sh-board[data-baked] > :not(.sh-board-cv) {
+  display: none;
+}
+.sh-board-drop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  /* sigma = 13px: alpha(d) = normal CDF at -39, -26, -13, 0, +13, +26, +39 px around the shadow edge. Horizontal edges are the panel edges
+     (the shadow rect starts 48px in); vertical edges are shifted 14px down. */
+  -webkit-mask-image:
+    linear-gradient(90deg, transparent 9px, rgba(0, 0, 0, 0.023) 22px, rgba(0, 0, 0, 0.159) 35px, rgba(0, 0, 0, 0.5) 48px, rgba(0, 0, 0, 0.841) 61px, #000 74px, #000 calc(100% - 74px), rgba(0, 0, 0, 0.841) calc(100% - 61px), rgba(0, 0, 0, 0.5) calc(100% - 48px), rgba(0, 0, 0, 0.159) calc(100% - 35px), rgba(0, 0, 0, 0.023) calc(100% - 22px), transparent calc(100% - 9px)),
+    linear-gradient(180deg, transparent 23px, rgba(0, 0, 0, 0.023) 36px, rgba(0, 0, 0, 0.159) 49px, rgba(0, 0, 0, 0.5) 62px, rgba(0, 0, 0, 0.841) 75px, #000 88px, #000 calc(100% - 60px), rgba(0, 0, 0, 0.841) calc(100% - 47px), rgba(0, 0, 0, 0.5) calc(100% - 34px), rgba(0, 0, 0, 0.159) calc(100% - 21px), rgba(0, 0, 0, 0.023) calc(100% - 8px), transparent 100%);
+  mask-image:
+    linear-gradient(90deg, transparent 9px, rgba(0, 0, 0, 0.023) 22px, rgba(0, 0, 0, 0.159) 35px, rgba(0, 0, 0, 0.5) 48px, rgba(0, 0, 0, 0.841) 61px, #000 74px, #000 calc(100% - 74px), rgba(0, 0, 0, 0.841) calc(100% - 61px), rgba(0, 0, 0, 0.5) calc(100% - 48px), rgba(0, 0, 0, 0.159) calc(100% - 35px), rgba(0, 0, 0, 0.023) calc(100% - 22px), transparent calc(100% - 9px)),
+    linear-gradient(180deg, transparent 23px, rgba(0, 0, 0, 0.023) 36px, rgba(0, 0, 0, 0.159) 49px, rgba(0, 0, 0, 0.5) 62px, rgba(0, 0, 0, 0.841) 75px, #000 88px, #000 calc(100% - 60px), rgba(0, 0, 0, 0.841) calc(100% - 47px), rgba(0, 0, 0, 0.5) calc(100% - 34px), rgba(0, 0, 0, 0.159) calc(100% - 21px), rgba(0, 0, 0, 0.023) calc(100% - 8px), transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  pointer-events: none;
+}
+.sh-board-frame {
+  position: absolute;
+  inset: 40px;
+  border-radius: 14px;
+  box-shadow:
+    inset 0 0 0 1px #bfbfbf,
+    inset 0 0 0 3px #8d9296,
+    inset 0 0 0 8px #d9dcde;
+}
+.sh-board-in {
+  position: absolute;
+  inset: 48px;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -1400,10 +1452,6 @@ html[data-restoring] #shop-story {
     linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 12%, rgba(0, 0, 0, 0) 80%, rgba(0, 0, 0, 0.22)),
     linear-gradient(90deg, #a9050f, #bb0818 20%, #bb0818 80%, #a9050f);
   box-shadow:
-    0 0 0 5px #d9dcde,
-    0 0 0 7px #8d9296,
-    0 0 0 8px rgba(0, 0, 0, 0.25),
-    0 14px 26px rgba(0, 0, 0, 0.35),
     inset 0 0 0 2px rgba(255, 255, 255, 0.18),
     inset 0 -10px 18px rgba(0, 0, 0, 0.18);
 }
@@ -1415,3 +1463,63 @@ html[data-restoring] #shop-story {
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
   mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
 }
+
+/* Header glass (components/liquid-glass.tsx). Scoped to .lg-glass; nothing else uses it. Liquid glass is mostly transparent: the page behind
+   stays readable and is bent at the rim (set inline by the component where the browser supports it). Depth comes from soft inner glow and a
+   soft lift, and from specular light that gathers on two opposite edges only (::after), so there is no outline. */
+.lg-glass {
+  --lg-tint: rgba(255, 255, 255, 0.1);
+  --lg-hi: rgba(255, 255, 255, 0.85);
+  --lg-hi2: rgba(255, 255, 255, 0.5);
+  --lg-lo: rgba(0, 0, 0, 0.14);
+  --lg-spec: rgba(255, 255, 255, 1);
+  position: relative;
+  background-color: var(--lg-tint);
+  -webkit-backdrop-filter: blur(2px) saturate(1.6) brightness(1.08);
+  backdrop-filter: blur(2px) saturate(1.6) brightness(1.08);
+  box-shadow:
+    inset 5px 5px 10px -5px var(--lg-hi),
+    inset -5px -5px 10px -5px var(--lg-hi2),
+    inset 0 -10px 14px -10px var(--lg-lo),
+    0 12px 28px -14px rgba(0, 0, 0, 0.3);
+  transition:
+    background-color 0.3s,
+    box-shadow 0.3s;
+}
+.lg-glass[data-tone="dark"] {
+  --lg-tint: rgba(20, 18, 24, 0.3);
+  --lg-hi: rgba(255, 255, 255, 0.35);
+  --lg-hi2: rgba(255, 255, 255, 0.2);
+  --lg-lo: rgba(0, 0, 0, 0.45);
+  --lg-spec: rgba(255, 255, 255, 0.85);
+}
+/* Specular light: a thin highlight that is strong at the top-left and bottom-right and falls away to nothing along the sides between. */
+.lg-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(135deg, var(--lg-spec) 0%, transparent 16%, transparent 84%, var(--lg-spec) 100%);
+  opacity: 0.8;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* Homepage: the floating header (components/header.tsx) lets the stories run to the top of the screen. Move their "Skip visual story"
+   buttons down so they sit just below the header bar instead of under it. Position only. */
+body:has(header[data-float]) .oo[data-live] .oo-skip,
+body:has(header[data-float]) .sh-skip,
+body:has(header[data-float]) .vs[data-live] .vs-skip {
+  top: 5rem;
+}
+
+
+
+
